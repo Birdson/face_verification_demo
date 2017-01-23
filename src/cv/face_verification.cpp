@@ -53,7 +53,7 @@ static double total_time = 0, detect_time = 0, alignment_time = 0, predit_time =
 static double frame_count = 0, fps = 0;
 static const cv::Size CAFFE_FACE_SIZE(200, 200);
 static const float CAFFE_STRNGER_THD = 0.5;
-static const bool ENABLE_AUTO_FACE_REGISTER = false;
+static const bool ENABLE_AUTO_FACE_REGISTER = true;
 static const std::string CV_ROOT_DIR = "./";
 static const std::string CV_MODELS_DIR = CV_ROOT_DIR + "models/";
 #ifdef ENABLE_CAFFE_FACE_DETECTION
