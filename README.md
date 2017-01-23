@@ -24,6 +24,7 @@ and stored models in the root of Face Verification Demo.
   # Extract the models.
   tar -xvf models.tar
   ```
+
 ### Build
   ```Shell
   # Modify `CAFFE_ROOT` in CMakeLists.txt to point to your Caffe SSD
