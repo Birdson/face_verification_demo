@@ -1,17 +1,35 @@
 # CNN based Face Verification Demo
 
+
+### Installation
+
 ## Requirements
 1. [OpenCV](https://github.com/opencv/opencv)
 2. [Caffe SSD](https://github.com/weiliu89/caffe/tree/ssd)
-3. Download models and unzip it to root
+Download the Caffe SSD, then follow [Caffe instruction](http://caffe.berkeleyvision.org/installation.html) to install all necessary packages and build it.
+  ```Shell
+  # Modify Makefile.config according to your Caffe installation.
+  cp Makefile.config.example Makefile.config
+  make -j8
+  # Make sure to include $CAFFE_ROOT/python to your PYTHONPATH.
+  make py
+  make test -j8
+  # (Optional)
+  make runtest -j8
 
+3. Download the models from [Dropbox](https://www.dropbox.com/s/kaik5g0wnw6qndl/models.tar?dl=0) and stored models in the root of Face Verification Demo.
+  ```Shell
+  # Extract the models.
+  tar -xvf models.tar
 
 ## Build
-1. Modify "CAFFE_ROOT" to point to your Caffe SSD
-2. mkdir build
-3. cd build
-4. cmake ..
-5. make -j8
+  ```Shell
+  # Modify `CAFFE_ROOT` in CMakeLists.txt to point to your Caffe SSD
+  mkdir build
+  cd build
+  cmake ..
+  make -j8
 
 ## Run
-./build/face_verification_demo
+  ```Shell
+  ./build/face_verification_demo
