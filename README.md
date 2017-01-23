@@ -3,7 +3,7 @@
 
 ### Installation
 
-## Requirements
+### Requirements
 1. [OpenCV](https://github.com/opencv/opencv)
 2. [Caffe SSD](https://github.com/weiliu89/caffe/tree/ssd)
 Download the Caffe SSD, then follow [Caffe instruction](http://caffe.berkeleyvision.org/installation.html) to install all necessary packages and build it.
@@ -16,20 +16,24 @@ Download the Caffe SSD, then follow [Caffe instruction](http://caffe.berkeleyvis
   make test -j8
   # (Optional)
   make runtest -j8
+  ```
 
-3. Download the models from [Dropbox](https://www.dropbox.com/s/kaik5g0wnw6qndl/models.tar?dl=0) and stored models in the root of Face Verification Demo.
+3. Download the models from [Dropbox](https://www.dropbox.com/s/kaik5g0wnw6qndl/models.tar?dl=0)
+and stored models in the root of Face Verification Demo.
   ```Shell
   # Extract the models.
   tar -xvf models.tar
-
-## Build
+  ```
+### Build
   ```Shell
   # Modify `CAFFE_ROOT` in CMakeLists.txt to point to your Caffe SSD
   mkdir build
   cd build
   cmake ..
   make -j8
+  ```
 
-## Run
+### Run
   ```Shell
   ./build/face_verification_demo
+  ```
