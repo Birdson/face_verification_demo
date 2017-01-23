@@ -1,0 +1,5 @@
+build
+.temp
+face_register
+face_predict
+.face.jpg
