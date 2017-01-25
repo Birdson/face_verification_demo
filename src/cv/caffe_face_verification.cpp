@@ -58,10 +58,7 @@ static float GetCosineSimilarity(const float* V1,const float* V2, int len)
 }
 
 CaffeFaceVerification::CaffeFaceVerification(const string model_path,
-                   const string weights_path,
-                   const string& mean_file,
-                   const string& mean_value,
-                   const float scale_value) {
+                   const string weights_path) {
     CHECK_GT(model_path.size(), 0) << "Need a model definition to score.";
     CHECK_GT(weights_path.size(), 0) << "Need model weights to score.";
 
@@ -83,24 +80,30 @@ CaffeFaceVerification::CaffeFaceVerification(const string model_path,
             << "Input layer should have 1 or 3 channels.";
     input_geometry_ = cv::Size(input_layer->width(), input_layer->height());
 
-    /* Load the binaryproto mean file. */
-    SetMean(mean_file, mean_value);
-
-    scale_ = scale_value;
-
+    string mean="0.0";
+    scale_=1.0;
     if (caffe_net->name()=="sc50_net") {
         caffe_predit_size=110;
         caffe_blob_name="eltwise6";
     } else if (caffe_net->name()=="sc70_net") {
+        mean="127.5";
+        scale_=0.0078125;
         caffe_predit_size=57;
         caffe_blob_name="fc61";
     } else if (caffe_net->name()=="sc76_net") {
+        scale_=0.00390625;
         caffe_predit_size=58;
         caffe_blob_name="fc777";
     } else if (caffe_net->name()=="sc79_net") {
+        mean="127.5";
+        scale_=0.0078125;
         caffe_predit_size=106;
         caffe_blob_name="fc1";
     }
+    const string& mean_value=mean;
+
+    /* Load the binaryproto mean file. */
+    SetMean("", mean_value);
 }
 
 CaffeFaceVerification::~CaffeFaceVerification() {
