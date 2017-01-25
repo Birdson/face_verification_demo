@@ -13,10 +13,7 @@ class CaffeFaceVerification
 {
 public:
     CaffeFaceVerification(const string model_path,
-                   const string weights_path,
-                   const string& mean_file,
-                   const string& mean_value,
-                   const float scale_value);
+                   const string weights_path);
     ~CaffeFaceVerification();
     float* extract_feature(const string img_path);
     int verify_face(string img_path, std::vector<float*>& face_register_features, const float threshold);
