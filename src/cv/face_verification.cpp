@@ -52,7 +52,7 @@ using namespace boost::lambda;
 static double total_time = 0, detect_time = 0, alignment_time = 0, predit_time = 0;
 static double frame_count = 0, fps = 0;
 static const cv::Size CAFFE_FACE_SIZE(200, 200);
-static const float CAFFE_STRNGER_THD = 0.5;
+static const float CAFFE_STRNGER_THD = 0.55;
 static const bool ENABLE_AUTO_FACE_REGISTER = true;
 static const std::string CV_ROOT_DIR = "./";
 static const std::string CV_MODELS_DIR = CV_ROOT_DIR + "models/";
@@ -294,7 +294,7 @@ bool FaceVerification::initFaceVerification(void)
   clock_t start, end;
   double costtime;
   start = clock();
-  cfv_ = new caffe::CaffeFaceVerification(FACE_VERIFICATION_MODEL_PATH, FACE_VERIFICATION_WEIGHT_PATH, "", "0", 1.0);
+  cfv_ = new caffe::CaffeFaceVerification(FACE_VERIFICATION_MODEL_PATH, FACE_VERIFICATION_WEIGHT_PATH);
   end = clock();
   costtime = 1000.0 * (end-start)/(double) CLOCKS_PER_SEC;
 #if DEBUG
