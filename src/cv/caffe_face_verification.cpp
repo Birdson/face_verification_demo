@@ -88,15 +88,18 @@ CaffeFaceVerification::CaffeFaceVerification(const string model_path,
 
     scale_ = scale_value;
 
-    if (caffe_net->name()=="sc56_net") {
-        caffe_predit_size=57;
-        caffe_blob_name="eltwise66";
-    } else if (caffe_net->name()=="sc50_net") {
+    if (caffe_net->name()=="sc50_net") {
         caffe_predit_size=110;
         caffe_blob_name="eltwise6";
-    } else if (caffe_net->name()=="sc57_net") {
-        caffe_predit_size=110;
-        caffe_blob_name="eltwise66";
+    } else if (caffe_net->name()=="sc70_net") {
+        caffe_predit_size=57;
+        caffe_blob_name="fc61";
+    } else if (caffe_net->name()=="sc76_net") {
+        caffe_predit_size=58;
+        caffe_blob_name="fc777";
+    } else if (caffe_net->name()=="sc79_net") {
+        caffe_predit_size=106;
+        caffe_blob_name="fc1";
     }
 }
 
@@ -225,7 +228,7 @@ void CaffeFaceVerification::Preprocess(const cv::Mat& img,
 float* CaffeFaceVerification::extract_feature(string img_path) {
     CHECK(caffe_net != NULL);
 
-   if (caffe_predit_size == 57) {
+    if (caffe_predit_size == 57) {
         cv::Mat cv_img = cv::imread(img_path, CV_LOAD_IMAGE_GRAYSCALE);
         cv::resize(cv_img, cv_img, cv::Size(60, 60));
         cv::Rect final_face;
@@ -233,6 +236,28 @@ float* CaffeFaceVerification::extract_feature(string img_path) {
         final_face.y = 1.5;
         final_face.width = 58.5;
         final_face.height = 58.5;
+        cv_img = cv_img(final_face);
+        img_path = CV_TEMP_FACE_IMAGE;
+        cv::imwrite(img_path, cv_img);
+    } else if (caffe_predit_size == 58) {
+        cv::Mat cv_img = cv::imread(img_path, CV_LOAD_IMAGE_GRAYSCALE);
+        cv::resize(cv_img, cv_img, cv::Size(60, 60));
+        cv::Rect final_face;
+        final_face.x = 1;
+        final_face.y = 1;
+        final_face.width = 59;
+        final_face.height = 59;
+        cv_img = cv_img(final_face);
+        img_path = CV_TEMP_FACE_IMAGE;
+        cv::imwrite(img_path, cv_img);
+    } else if (caffe_predit_size == 106) {
+        cv::Mat cv_img = cv::imread(img_path, CV_LOAD_IMAGE_GRAYSCALE);
+        cv::resize(cv_img, cv_img, cv::Size(110, 110));
+        cv::Rect final_face;
+        final_face.x = 2;
+        final_face.y = 2;
+        final_face.width = 108;
+        final_face.height = 108;
         cv_img = cv_img(final_face);
         img_path = CV_TEMP_FACE_IMAGE;
         cv::imwrite(img_path, cv_img);
