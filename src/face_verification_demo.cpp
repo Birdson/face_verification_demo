@@ -36,4 +36,5 @@ int main(int argc, char **argv){
         imshow("Face Verificaiton Demo", output_frame);
         waitKey(33);
    }
+   capture.release();
 }
