@@ -13,18 +13,17 @@ int main(int argc, char **argv){
     double total_detect_sec;
     Mat frame;
     Mat output_frame;
-    VideoCapture cap;
-    cap.open(0);
-    if (!cap.isOpened())  // check if succeeded to connect to the camera
+    VideoCapture capture(0);
+    if (!capture.isOpened())  // check if succeeded to connect to the camera
        CV_Assert("Cam open failed");
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, 720);
+    capture.set(CV_CAP_PROP_FRAME_WIDTH, 1280);
+    capture.set(CV_CAP_PROP_FRAME_HEIGHT, 720);
     namedWindow("Face Verificaiton Demo", WINDOW_AUTOSIZE);
 
     FaceVerification *fv = new FaceVerification();
     start = clock();
     while (1){
-        cap >> frame;
+        capture >> frame;
         flip(frame,frame,1);
         frame.copyTo(output_frame);
         std::vector<Rect> faces;
