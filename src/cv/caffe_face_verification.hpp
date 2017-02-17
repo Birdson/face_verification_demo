@@ -2,8 +2,9 @@
 #define CAFFE_FACE_VERIFICATION_HPP_
 
 #include <string>
-#include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
 #include "caffe/caffe.hpp"
+#include "face_verification_data.hpp"
 
 using std::string;
 
@@ -16,7 +17,7 @@ public:
                    const string weights_path);
     ~CaffeFaceVerification();
     float* extract_feature(const string img_path);
-    int verify_face(string img_path, std::vector<float*>& face_register_features, const float threshold);
+    FaceVerificationData* verify_face(string img_path, std::vector<float*>& face_register_features, const float threshold);
 
 private:
     Net<float> *caffe_net;

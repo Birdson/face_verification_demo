@@ -24,8 +24,7 @@
 #ifndef _FACE_VERIFICATION_H_
 #define _FACE_VERIFICATION_H_
 
-#include <opencv2/objdetect/objdetect.hpp>
-#include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
 #include <dlib/image_processing.h>
 #include "caffe_face_detection.hpp"
 #include "caffe_face_landmark_detection.hpp"
@@ -33,29 +32,29 @@
 
 #include <boost/filesystem.hpp>
 
-#define ENABLE_CAFFE_FACE_DETECTION
-#define ENABLE_CAFFE_FACE_LANDMARK_DETECTION
-
-#define ENABLE_DRAW_FACE_BOXS
-#define ENABLE_DRAW_FACE_LANDMARKS
-#define ENABLE_DRAW_DEBUG_INFORMATION
+#include "yolo_detector.h"
 
 using namespace std;
 
 class FaceVerification
 {
-  public : 
+  public :
+    FaceVerification();
+    ~FaceVerification();
+
+    //Algorithms Part
     /*===========================================================================
-     * FUNCTION  : faceRegister
+     * FUNCTION  : faceRegistration
      *
      * DESCRIPTION  : Loading pre setting face taget
      *
-     * PARAMETERS  : 
-     *   @face : pre setting face path
+     * PARAMETERS  :
+     *   @face_register_path : new face image path for face registeration
+     *   @face_id_dir : assign pre registered face folder 
      *
      * RETURN  : success or not 
      *==========================================================================*/
-    bool faceRegister(string face_register_path, string face_id_dir="");
+    bool faceRegistration(string face_register_path, string face_id_dir="");
 
     /*===========================================================================
      * FUNCTION  : reset
@@ -67,22 +66,74 @@ class FaceVerification
     /*===========================================================================
      * FUNCTION  : detect
      *
-     * DESCRIPTION  : Detect taget in image
+     * DESCRIPTION  : Detect and verify face in image
+     *
+     * PARAMETERS  :
+     *   @img : source image refrence
+     *   @faces : detected face region
+     *   @face_ids : face verification result
+     *   @landmarks : face landmark result
+     *
+     * RETURN  : status
+     *==========================================================================*/
+    int detect(cv::Mat &img, vector<cv::Rect>& faces, vector<string>& face_ids, vector<cv::Point2f>& landmarks);
+
+    /*===========================================================================
+     * FUNCTION  : faceDetection
+     *
+     * DESCRIPTION  : Detect face in image
+     *
+     * PARAMETERS  :
+     *   @img : source image refrence
+     *   @faces : detected face region
+     *
+     *==========================================================================*/
+    void faceDetection(cv::Mat& img, vector<cv::Rect>& faces);
+
+    /*===========================================================================
+     * FUNCTION  : faceAlignment
+     *
+     * DESCRIPTION  : Align face for detected faces
      *
      * PARAMETERS  : 
      *   @img : source image refrence
-     *   @roi : detected target region
+     *   @aligning_faces : face region after alignment
+     *   @landmarks : face landmarks
      *
-     * RETURN  : 
      *==========================================================================*/
-    int detect(cv::Mat &img, vector<cv::Rect>& faces);
+    void faceAlignment(cv::Mat& img, vector<cv::Rect>& aligning_faces, vector<cv::Point2f>& landmarks);
 
-    void faceDetection(cv::Mat& img, vector<cv::Rect>& faces);
-    void faceAlignment(cv::Mat& img, vector<cv::Rect>& aligning_faces, vector<cv::Point2f >& landmarks);
+    /*===========================================================================
+     * FUNCTION  : faceVerification
+     *
+     * DESCRIPTION  : Verify face for aligned faces
+     *
+     * PARAMETERS  :
+     *   @face_predict_num : the number of face for verification
+     *   @face_ids : face verification result
+     *   @faces : detected face region
+     * 
+     * RETURN  : success or not
+     *==========================================================================*/
     bool faceVerification(int face_predict_num, vector<string>& face_ids, vector<cv::Rect>& faces);
 
-    FaceVerification();
-    ~FaceVerification();
+    /*===========================================================================
+     * FUNCTION  : getFaceRegisterPaths
+     *
+     * DESCRIPTION  : Get current registered face image paths
+     * 
+     * RETURN  : face image paths
+     *==========================================================================*/
+    vector<boost::filesystem::path> getFaceRegisterPaths();
+
+    //UI Part
+    void showFaceWindow(cv::Mat& img, std::vector<cv::Rect> faces);
+    void drawFaceBoxes(cv::Mat& img, vector<cv::Rect>& faces, vector<string>& face_ids);
+    void drawFaceLandmarks(cv::Mat& img, vector<cv::Point2f>& landmarks);
+    void drawDebugInformation(cv::Mat& img,  double fps);
+
+    bool enable_auto_face_registration;
+    bool enable_auto_face_registration_retry;
 
   private :
     bool init_libs_state_;
@@ -95,16 +146,20 @@ class FaceVerification
     std::vector<float*> face_register_features;
     std::vector<float*> retry_face_register_features;
     cv::Rect leftRect, rightRect;
+    int stranger_count;
+    int face_detection_failed_count;
+    std::vector<cv::Rect> last_faces;
+    std::vector<cv::Rect> last_face_areas;
+    FaceVerificationData* fv_result;
+    face *face_boxes;
+
     bool init(void);
     bool initFaceDetection(void);
     bool initFaceLandmarkDetection(void);
     bool initFaceVerification(void);
+    bool checkFaces(string img_path);
     bool checkBlurryImage(string img_path, int blur_threshold=130);
-    void loadFaceFeatures(void);
-    void drawFaceBoxes(cv::Mat& img, vector<cv::Rect>& faces, vector<string >& face_ids);
-    void drawFaceLandmarks(cv::Mat& img, vector<cv::Point2f >& landmarks);
-    void drawDebugInformation(cv::Mat& img);
-    int stranger_count;
+    void loadRegisteredFaces(void);
 };
 
 #endif /* _FACE_VERIFICATION_H_ */

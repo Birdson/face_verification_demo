@@ -316,11 +316,12 @@ float* CaffeFaceVerification::extract_feature(string img_path) {
     return feature;
 }
 
-int CaffeFaceVerification::verify_face(string img_path, std::vector<float*>& face_register_features, const float threshold){
-    int index = -1;
+FaceVerificationData* CaffeFaceVerification::verify_face(string img_path, std::vector<float*>& face_register_features, const float threshold){
+    FaceVerificationData* result = new FaceVerificationData;
+    result->index = -1;
     float * feature = extract_feature(img_path);
 
-    if (feature == NULL) return index;
+    if (feature == NULL) return result;
 
     float max_sim = -1.0f;
     for (int i = 0; i < face_register_features.size(); ++i)
@@ -331,14 +332,15 @@ int CaffeFaceVerification::verify_face(string img_path, std::vector<float*>& fac
         const float sim = 1.0f - (1.0f - cos_sim);
         LOG(INFO) << "face verification confidence: " << sim;
         if (sim >= threshold && sim > max_sim) {
-            index = i;
             max_sim = sim;
+            result->index = i;
+            result->confidence = max_sim;
         }
     }
 
     free(feature);
 
-    return index;
+    return result;
 }
 
 } // namespace caffe

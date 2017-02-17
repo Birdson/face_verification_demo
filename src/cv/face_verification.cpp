@@ -20,12 +20,10 @@
  * the above provisions.
  *
  ******************************************************************************/
-
+#include "config_reader.h"
 #include "cv/face_verification.h"
 
 #include <string>
-
-#include "camera_cv_state.h"
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -42,47 +40,26 @@
 #include <omp.h>
 
 #define DEBUG 1
-#define DEBUG_FACE_VERIFICATION 0 //For integration test if there is no registered face
 
 using namespace std;
 using namespace cv;
 using namespace boost::filesystem;
 using namespace boost::lambda;
 
-static double total_time = 0, detect_time = 0, alignment_time = 0, predit_time = 0;
-static double frame_count = 0, fps = 0;
-static const cv::Size CAFFE_FACE_SIZE(200, 200);
-static const float CAFFE_STRNGER_THD = 0.55;
-static const bool ENABLE_AUTO_FACE_REGISTER = true;
+static double detect_time = 0, alignment_time = 0, predit_time = 0;
 static const std::string CV_ROOT_DIR = "./";
-static const std::string CV_MODELS_DIR = CV_ROOT_DIR + "models/";
-#ifdef ENABLE_CAFFE_FACE_DETECTION
-static const cv::Size MIN_FACE_DETECT_SIZE(50, 50);
-static const int MAX_STRANGER_COUNT = 60;
-static const float CONFIDENCE_THRESHOLD = 0.4;
-static const std::string FACE_DETECTION_MODEL_PATH = CV_MODELS_DIR + "pega_face_detection_deploy.prototxt";
-static const std::string FACE_DETECTION_WEIGHT_PATH = CV_MODELS_DIR + "pega_face_detection.caffemodel";
-#else
-static const cv::Size MIN_FACE_DETECT_SIZE(50, 50);
-static const cv::Size MAX_FACE_DETECT_SIZE(450, 450);
-static const int MAX_STRANGER_COUNT = 10;
-static const std::string FACE_DETECTION_MODEL_PATH = CV_MODELS_DIR + "haarcascade_frontalface_alt2.xml";
-#endif
-static const std::string FACE_LANDMARK_DETECTION_MODEL_PATH = CV_MODELS_DIR + "pega_68_face_landmarks.dat";
-static const std::string CNN_FACE_LANDMARK_DETECTION_MODEL_PATH = CV_MODELS_DIR + "68point_with_pose_deploy.prototxt";
-static const std::string CNN_FACE_LANDMARK_DETECTION_WEIGHT_PATH = CV_MODELS_DIR + "68point_with_pose.caffemodel";
-static const std::string CNN_FACE_LANDMARK_DETECTION_MEAN_PATH = CV_MODELS_DIR + "VGG_mean.binaryproto";
-static const std::string FACE_VERIFICATION_WEIGHT_PATH = CV_MODELS_DIR + "pega_face_verification.caffemodel";
-static const std::string FACE_VERIFICATION_MODEL_PATH = CV_MODELS_DIR + "pega_face_verification_deploy.prototxt";
 static const std::string CV_FACE_REGISTER_DIR = CV_ROOT_DIR + "face_register/";
 static const std::string CV_FACE_PREDICT_DIR= CV_ROOT_DIR + "face_predict/";
 static const std::string CV_TEMP_DIR = CV_ROOT_DIR + ".temp/";
 
 static const std::string POSE_NAME[] = {"Pitch", "Yaw", "Roll"};
 
-inline bool file_exists (const std::string& name) {
-  struct stat buffer;
-  return (stat (name.c_str(), &buffer) == 0);
+inline float getIoU(Rect a, Rect b)
+{
+  Rect unionRect = a | b;
+  Rect intersectionRect = a & b;
+  float iou = (float)intersectionRect.area()/(float)unionRect.area();
+  return iou;
 }
 
 inline void CVRect_to_DlibRect(vector<dlib::rectangle>& d_rect, vector<Rect>& cv_rect)
@@ -91,7 +68,7 @@ inline void CVRect_to_DlibRect(vector<dlib::rectangle>& d_rect, vector<Rect>& cv
 
   d_rect.clear();
 
-  for(int i=0; i < cv_rect.size(); i++)
+  for(unsigned int i=0; i < cv_rect.size(); i++)
   {
     rect.set_left(cv_rect[i].x);
     rect.set_top(cv_rect[i].y);
@@ -101,37 +78,25 @@ inline void CVRect_to_DlibRect(vector<dlib::rectangle>& d_rect, vector<Rect>& cv
   }
 }
 
-static float GetCosineSimilarity(const float* V1,const float* V2)
-{
-    double sim = 0.0d;
-    int N = sizeof(V1);
-    printf( "N is %d", N);
-    double dot = 0.0d;
-    double mag1 = 0.0d;
-    double mag2 = 0.0d;
-    for (int n = 0; n < N; n++)
-    {
-        dot += V1[n] * V2[n];
-        mag1 += pow(V1[n], 2);
-        mag2 += pow(V2[n], 2);
-    }
-
-    return dot / (sqrt(mag1) * sqrt(mag2));
-}
-
 FaceVerification::FaceVerification()
 {
   cfv_ = NULL;
+  enable_auto_face_registration = true;
+  enable_auto_face_registration_retry = true && enable_auto_face_registration;
   if (!boost::filesystem::exists(CV_TEMP_DIR)) {
     boost::filesystem::create_directory(CV_TEMP_DIR);
   }
   init_libs_state_ = init();
-  if (init_libs_state_) loadFaceFeatures();
+  if (init_libs_state_) loadRegisteredFaces();
 }
 
 FaceVerification::~FaceVerification()
 {
+  delete fv_result;
+  delete cfd_;
+  delete cfld_;
   delete cfv_;
+  free(face_boxes);
 }
 
 bool FaceVerification::init(void)
@@ -151,7 +116,7 @@ bool FaceVerification::init(void)
   return init_state;
 }
 
-void FaceVerification::loadFaceFeatures(void)
+void FaceVerification::loadRegisteredFaces(void)
 {
   face_register_paths.clear();
   face_register_features.clear();
@@ -185,40 +150,68 @@ void FaceVerification::loadFaceFeatures(void)
 
 bool FaceVerification::initFaceDetection(void)
 {
-  if (!file_exists(FACE_DETECTION_MODEL_PATH))  {
-    CHECK_GT(FACE_DETECTION_MODEL_PATH.size(), 0) << "Need a Face Detection Model to detect face.";
-    printf("Can't find Face Detection Model %s\n", FACE_DETECTION_MODEL_PATH.c_str());
-    return false;
-  }
 
-#ifdef ENABLE_CAFFE_FACE_DETECTION
-  if (!file_exists(FACE_DETECTION_WEIGHT_PATH))  {
-    CHECK_GT(FACE_DETECTION_WEIGHT_PATH.size(), 0) << "Need a Face Detection Weight to detect face.";
-    printf("Can't find Face Detection Weight %s\n", FACE_DETECTION_WEIGHT_PATH.c_str());
-    return false;
-  }
-#endif
-
-#if DEBUG
-  printf("Initial Face Detection: %s\n", FACE_DETECTION_MODEL_PATH.c_str());
-#endif
   bool init_state = false;
   try
   {
-    clock_t start, end;
     double costtime;
-    start = clock();
+    clock_t time = clock();
 
-#ifdef ENABLE_CAFFE_FACE_DETECTION
-    const string& mean_value = "104,117,123";
-    cfd_ = new caffe::CaffeFaceDetection(FACE_DETECTION_MODEL_PATH, FACE_DETECTION_WEIGHT_PATH, "", mean_value);
-    init_state = true;
-#else
-    init_state = cascade.load(FACE_DETECTION_MODEL_PATH);
-#endif
+    if (ConfigReader::getInstance()->yolo_config.enable)
+    {
+      const string model = ConfigReader::getInstance()->yolo_config.model;
+      const string weight = ConfigReader::getInstance()->yolo_config.weight;
+      const string sub_model = ConfigReader::getInstance()->yolo_config.sub_model;
+      const string sub_weight = ConfigReader::getInstance()->yolo_config.sub_weight;
 
-    end = clock();
-    costtime = 1000.0 * (end-start)/(double) CLOCKS_PER_SEC;
+      //Using sub yolo face detection to check face exits before face registration
+      if (!boost::filesystem::exists(model) && !boost::filesystem::exists(sub_model)) {
+        CHECK_GT(sub_model.size(), 0) << "Need a Face Detection Model to detect face.";
+        printf("Can't find Face Detection Model %s\n", sub_model.c_str());
+        return false;
+      }
+      if (!boost::filesystem::exists(sub_weight) && !boost::filesystem::exists(weight)) {
+        CHECK_GT(sub_weight.size(), 0) << "Need a Face Detection Weight to detect face.";
+        printf("Can't find Face Detection Weight %s\n", sub_weight.c_str());
+        return false;
+      }
+
+      init_state = yolo_init((char *)model.c_str(), (char *)weight.c_str())
+            && sub_yolo_init((char *)sub_model.c_str(), (char *)sub_weight.c_str());
+    }
+    else if (ConfigReader::getInstance()->ssd_config.enable)
+    {
+      const string model = ConfigReader::getInstance()->ssd_config.model;
+      const string weight = ConfigReader::getInstance()->ssd_config.weight;
+
+      if (!boost::filesystem::exists(model)) {
+        CHECK_GT(model.size(), 0) << "Need a Face Detection Model to detect face.";
+        printf("Can't find Face Detection Model %s\n", model.c_str());
+        return false;
+      }
+
+      if (!boost::filesystem::exists(weight)) {
+        CHECK_GT(weight.size(), 0) << "Need a Face Detection Weight to detect face.";
+        printf("Can't find Face Detection Weight %s\n", weight.c_str());
+        return false;
+      }
+
+      const string& mean_value = "104,117,123";
+      cfd_ = new caffe::CaffeFaceDetection(model, weight, "", mean_value);
+      init_state = true;
+    }
+    else if (ConfigReader::getInstance()->haar_config.enable)
+    {
+      const std::string model = ConfigReader::getInstance()->haar_config.model;
+      if (!boost::filesystem::exists(model)) {
+        CHECK_GT(model.size(), 0) << "Need a Face Detection Model to detect face.";
+        printf("Can't find Face Detection Model %s\n", model.c_str());
+        return false;
+      }
+      init_state = cascade.load(model);
+    }
+
+    costtime = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
 #if DEBUG
     printf("Load Face Detection time is %f ms\n", costtime);
 #endif
@@ -236,29 +229,45 @@ bool FaceVerification::initFaceDetection(void)
 
 bool FaceVerification::initFaceLandmarkDetection(void)
 {
-  if (!file_exists(FACE_LANDMARK_DETECTION_MODEL_PATH))  {
-    CHECK_GT(FACE_LANDMARK_DETECTION_MODEL_PATH.size(), 0) << "Need a dlib shape to landmark face.";
-    printf("Can't find dlib shape %s\n", FACE_LANDMARK_DETECTION_MODEL_PATH.c_str());
-  }
-
-#if DEBUG
-  printf("Initial Dlib Shape Predictor: %s\n", FACE_LANDMARK_DETECTION_MODEL_PATH.c_str());
-#endif
   bool init_state = false;
   try
   {
-    clock_t start, end;
     double costtime;
-    start = clock();
+    clock_t time = clock();
+    if(ConfigReader::getInstance()->landmark_config.enable_caffe)
+    {
+      const string caffe_model = ConfigReader::getInstance()->landmark_config.caffe_model;
+      const string caffe_weight = ConfigReader::getInstance()->landmark_config.caffe_weight;
+      const string caffe_mean = ConfigReader::getInstance()->landmark_config.caffe_mean;
+      if (!boost::filesystem::exists(caffe_model))  {
+          CHECK_GT(caffe_model.size(), 0) << "Need a Face Landmark Model to detect face.";
+          printf("Can't find Face Landmark Model %s\n", caffe_model.c_str());
+          return false;
+      }
+      if (!boost::filesystem::exists(caffe_weight))  {
+          CHECK_GT(caffe_weight.size(), 0) << "Need a Face Landmark Weight to detect face.";
+          printf("Can't find Face Landmark Weight %s\n", caffe_weight.c_str());
+          return false;
+      }
+      if (!boost::filesystem::exists(caffe_mean))  {
+          CHECK_GT(caffe_mean.size(), 0) << "Need a Face Landmark Mean to detect face.";
+          printf("Can't find Face Landmark Mean %s\n", caffe_mean.c_str());
+          return false;
+      }
 
-#ifdef ENABLE_CAFFE_FACE_LANDMARK_DETECTION
-    cfld_ = new caffe::CaffeFaceLandmarkDetection(CNN_FACE_LANDMARK_DETECTION_MODEL_PATH,
-            CNN_FACE_LANDMARK_DETECTION_WEIGHT_PATH, CNN_FACE_LANDMARK_DETECTION_MEAN_PATH);
-#else
-    dlib::deserialize(FACE_LANDMARK_DETECTION_MODEL_PATH) >> pose_model;
-#endif
-    end = clock();
-    costtime = 1000.0 * (end-start)/(double) CLOCKS_PER_SEC;
+      cfld_ = new caffe::CaffeFaceLandmarkDetection(caffe_model, caffe_weight, caffe_mean);
+    }
+    else
+    {
+      const string dlib_model = ConfigReader::getInstance()->landmark_config.dlib_model;
+      if (!boost::filesystem::exists(dlib_model))  {
+          CHECK_GT(dlib_model.size(), 0) << "Need a Face Landmark Model to detect face.";
+          printf("Can't find Face Landmark Model %s\n", dlib_model.c_str());
+          return false;
+      }
+      dlib::deserialize(dlib_model) >> pose_model;
+    }
+    costtime = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
 #if DEBUG
     printf("Load Pose Model time is %f ms\n", costtime);
 #endif
@@ -277,26 +286,26 @@ bool FaceVerification::initFaceLandmarkDetection(void)
 
 bool FaceVerification::initFaceVerification(void)
 {
-  if (!file_exists(FACE_VERIFICATION_MODEL_PATH))  {
-    CHECK_GT(FACE_VERIFICATION_MODEL_PATH.size(), 0) << "Need a Model Definition File to verify face.";
-    printf("Can't find Model Definition %s\n", FACE_VERIFICATION_MODEL_PATH.c_str());
+  const string model = ConfigReader::getInstance()->sc_config.model;
+  const string weight = ConfigReader::getInstance()->sc_config.weight;
+  if (!boost::filesystem::exists(model))  {
+    CHECK_GT(model.size(), 0) << "Need a Model Definition File to verify face.";
+    printf("Can't find Model Definition %s\n", model.c_str());
     return false;
   }
-  if (!file_exists(FACE_VERIFICATION_WEIGHT_PATH))  {
-    CHECK_GT(FACE_VERIFICATION_WEIGHT_PATH.size(), 0) << "Need a Model Definition File to verify face.";
-    printf("Can't find Model Definition %s\n", FACE_VERIFICATION_WEIGHT_PATH.c_str());
+  if (!boost::filesystem::exists(weight))  {
+    CHECK_GT(weight.size(), 0) << "Need a Model Definition File to verify face.";
+    printf("Can't find Model Definition %s\n", weight.c_str());
     return false;
   }
 #if DEBUG
-  printf("Initial Cafffe Model Definition: %s\n", FACE_VERIFICATION_MODEL_PATH.c_str());
-  printf("Initial Cafffe Model Weights: %s\n", FACE_VERIFICATION_WEIGHT_PATH.c_str());
+  printf("Initial Cafffe Model Definition: %s\n", model.c_str());
+  printf("Initial Cafffe Model Weights: %s\n", weight.c_str());
 #endif
-  clock_t start, end;
   double costtime;
-  start = clock();
-  cfv_ = new caffe::CaffeFaceVerification(FACE_VERIFICATION_MODEL_PATH, FACE_VERIFICATION_WEIGHT_PATH);
-  end = clock();
-  costtime = 1000.0 * (end-start)/(double) CLOCKS_PER_SEC;
+  clock_t time = clock();
+  cfv_ = new caffe::CaffeFaceVerification(model, weight);
+  costtime = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
 #if DEBUG
   printf("Load Caffe Net time is %f ms\n", costtime);
 #endif
@@ -307,59 +316,76 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
 {
   Mat gray;
   cvtColor( img, gray, CV_BGR2GRAY );
-
-  double start = (double)cvGetTickCount();
-#ifdef ENABLE_CAFFE_FACE_DETECTION
-  std::vector<std::vector<float> > detections = cfd_->Detect(img);
-  const int detection_size = 7;
-  for (int i = 0; i < detections.size(); ++i) {
-        const std::vector <float> detection = detections[i];
-        // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
-
-        CHECK_EQ(detection.size(), detection_size);
-
-        const float score = detection[2];
-        if (score >= CONFIDENCE_THRESHOLD) {
-            int xmin = max(static_cast<int>(detection[3] * img.cols), 0);
-            int ymin = max(static_cast<int>(detection[4] * img.rows), 0);
-            int xmax = min(static_cast<int>(detection[5] * img.cols), img.cols);
-            int ymax = min(static_cast<int>(detection[6] * img.rows), img.rows);
-            int width = xmax - xmin;
-            int height = ymax - ymin;
-            const int x_center = xmin + width/2;
-            const int y_center = ymin + height/2;
-            xmin = max(x_center - max(width, height)/2, 0);
-            ymin = max(y_center - max(width, height)/2, 0);
-            width = max(width, height);
-            height = max(width, height);
-            if (xmin + width > img.cols)
-               width = img.cols - xmin;
-            if (ymin + height > img.rows)
-               height = img.rows - ymin;
-
-            if (min(width, height) > MIN_FACE_DETECT_SIZE.width) {
-                const float ratio = ((float)min(width, height)/(float)max(width, height));
-                if (ratio > 0.65) {
-                    faces.push_back(Rect(xmin, ymin, width, height));
-                }
-            }
+  clock_t time = clock();
+  if (ConfigReader::getInstance()->yolo_config.enable) {
+    IplImage *frame = new IplImage(img);
+    const float threshold = ConfigReader::getInstance()->yolo_config.confidence_threshold;
+    face_boxes = yolo_detect(frame, threshold, .5, 1.2);
+    if (face_boxes != NULL) {
+      int detection_num = yolo_get_detection_num();
+      for (int i = 0; i < detection_num; ++i) {
+        if (face_boxes[i].width > 0 && face_boxes[i].height > 0) {
+          faces.push_back(Rect(face_boxes[i].xmin, face_boxes[i].ymin, face_boxes[i].width, face_boxes[i].height));
         }
+      }
     }
-#else
-  cascade.detectMultiScale(gray, faces,
-        1.2, 3, 2
-        ,MIN_FACE_DETECT_SIZE, MAX_FACE_DETECT_SIZE);
-#endif
+  }
+  else if (ConfigReader::getInstance()->ssd_config.enable)
+  {
+    const cv::Size min_face_detect_size(50, 50);
+    const float threshold = ConfigReader::getInstance()->ssd_config.confidence_threshold;
+    std::vector<std::vector<float>> detections = cfd_->Detect(img);
+    const int detection_size = 7;
+    for (int i = 0; i < detections.size(); ++i) {
+      const std::vector <float> detection = detections[i];
+      // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
 
-  double end = (double)cvGetTickCount();
-  detect_time = (end - start)/((double)cvGetTickFrequency()*1000.);
-  int size = faces.size();
+      CHECK_EQ(detection.size(), detection_size);
+
+      const float score = detection[2];
+      if (score >= threshold) {
+        int xmin = max(static_cast<int>(detection[3] * img.cols), 0);
+        int ymin = max(static_cast<int>(detection[4] * img.rows), 0);
+        int xmax = min(static_cast<int>(detection[5] * img.cols), img.cols);
+        int ymax = min(static_cast<int>(detection[6] * img.rows), img.rows);
+        int width = xmax - xmin;
+        int height = ymax - ymin;
+        const int x_center = xmin + width/2;
+        const int y_center = ymin + height/2;
+        xmin = max(x_center - max(width, height)/2, 0);
+        ymin = max(y_center - max(width, height)/2, 0);
+        width = max(width, height);
+        height = max(width, height);
+        if (xmin + width > img.cols)
+          width = img.cols - xmin;
+        if (ymin + height > img.rows)
+          height = img.rows - ymin;
+
+        if (min(width, height) > min_face_detect_size.width) {
+          const float ratio = ((float)min(width, height)/(float)max(width, height));
+          if (ratio > 0.65) {
+            faces.push_back(Rect(xmin, ymin, width, height));
+          }
+        }
+      }
+    }
+  }
+  else if (ConfigReader::getInstance()->haar_config.enable)
+  {
+    const cv::Size min_face_detect_size(50, 50);
+    const cv::Size max_face_detect_size(450, 450);
+    cascade.detectMultiScale(gray, faces,
+        1.2, 3, 2
+        ,min_face_detect_size, max_face_detect_size);
+  }
+
+  detect_time = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
 #if DEBUG
-  printf( "Face Detection %d faces and time is %g ms\n", size, detect_time);
+  printf( "Face Detection %ld faces and time is %g ms\n", faces.size(), detect_time);
 #endif
   Rect temp;
-  for( int i = 0; i < faces.size(); i++) {
-    for( int j = i; j < faces.size(); j++) {
+  for(unsigned int i = 0; i < faces.size(); i++) {
+    for(unsigned int j = i; j < faces.size(); j++) {
       if( faces[j].area() > faces[i].area() ) {
         temp = faces[j];
         faces[j] = faces[i];
@@ -367,29 +393,76 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
       }
     }
   }
-  if (faces.size() > 0) {
-    Mat face = img(faces[0]);
-    resize(face, face, Size(300, 300));
-    imshow("Face Detection", face);
-  } else {
-    destroyWindow("Face Detection");
-  }
   gray.release();
 }
 
-void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vector<Point2f >& landmarks)
+void FaceVerification::showFaceWindow(Mat& img, vector<Rect> faces)
+{
+  if (last_face_areas.size() != faces.size()) last_face_areas.clear();
+
+  Rect temp;
+  for(unsigned int i = 0; i < faces.size(); i++) {
+    for(unsigned int j = i; j < faces.size(); j++) {
+      if( faces[j].x < faces[i].x ) {
+        temp = faces[j];
+        faces[j] = faces[i];
+        faces[i] = temp;
+      }
+    }
+  }
+
+  const int size = 300;
+  if (faces.size() > 0) {
+    Mat combine = Mat::zeros(size, size*faces.size(), img.type());
+    for(unsigned int i = 0; i < faces.size(); i++) {
+      const int x_center = faces[i].x + faces[i].width/2;
+      const int y_center = faces[i].y + faces[i].height/2;
+      int width = max(faces[i].width,350);
+      int height = max(faces[i].height,350);
+      int xmin = max(x_center - width/2, 0);
+      int ymin = max(y_center - height/2, 0);
+      if (xmin + width > img.cols)
+        width = img.cols - xmin;
+      if (ymin + height > img.rows)
+        height = img.rows - ymin;
+
+      Rect faceArea = Rect(xmin, ymin, width, height);
+
+      bool needUpdate = true;
+      for(unsigned int j = 0; j < last_face_areas.size(); j++) {
+        if (getIoU(last_face_areas[j], faceArea) > 0.4){
+          needUpdate = false;
+          faceArea = last_face_areas[j];
+          break;
+        }
+      }
+      if (needUpdate) {
+        last_face_areas.push_back(faceArea);
+      }
+
+      Mat face = img(faceArea);
+      resize(face, face, Size(size, size));
+      face.copyTo(combine(Rect(size*i, 0, size, size)));
+      face.release();
+    }
+    imshow("Face Window", combine);
+    combine.release();
+  } else {
+    destroyWindow("Face Window");
+  }
+}
+
+void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vector<Point2f>& landmarks)
 {
   try
   {
-    int i;
+    unsigned int i;
     vector<Rect> faces = aligning_faces;
-    clock_t start,end;
     vector<dlib::rectangle> dlibRectFaces;
     CVRect_to_DlibRect(dlibRectFaces, aligning_faces);
-    Mat gray, warped, final_face_mat;
-    cvtColor(img, gray, CV_BGR2GRAY);
+    Mat warped, final_face_mat;
     cv::Mat newimg(img.rows, img.cols, CV_8UC3);
-    newimg = gray.clone();
+    newimg = img.clone();
     dlib::cv_image<dlib::bgr_pixel> cimg(img);
     char outputImage[100];
     aligning_faces.clear();
@@ -400,55 +473,64 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
     }
     boost::filesystem::create_directory(CV_FACE_PREDICT_DIR);
 
-    start = clock();
+    clock_t time = clock();
     //#pragma omp parallel for num_threads(1)
     for (i = 0; i < dlibRectFaces.size(); ++i)
     {
-#ifdef ENABLE_CAFFE_FACE_LANDMARK_DETECTION
-      float* pose_detection;
-      vector<Point2f> face_landmark = cfld_->Detect(img, faces[i], pose_detection);
+      double left_eye_x;
+      double left_eye_y;
+      double right_eye_x;
+      double right_eye_y;
+      double left;
+      double right;
+      double bottom;
+      if(ConfigReader::getInstance()->landmark_config.enable_caffe)
+      {
+        float* pose_detection;
+        vector<Point2f> face_landmark = cfld_->Detect(img, faces[i], pose_detection);
 
 
-      /*for(int j = 0; j < 3; j++) {
-        LOG(INFO) << POSE_NAME[j] << " : " << pose_detection[j];
-      }*/
+        /*for(unsigned int j = 0; j < 3; j++) {
+          LOG(INFO) << POSE_NAME[j] << " : " << pose_detection[j];
+        }*/
 
-      double left_eye_x = (face_landmark[36].x + face_landmark[37].x + face_landmark[38].x + face_landmark[39].x + face_landmark[40].x + face_landmark[41].x)/6;
-      double left_eye_y = (face_landmark[36].y + face_landmark[37].y + face_landmark[38].y + face_landmark[39].y + face_landmark[40].y + face_landmark[41].y)/6;
-      double right_eye_x = (face_landmark[42].x + face_landmark[43].x + face_landmark[44].x + face_landmark[45].x + face_landmark[46].x + face_landmark[47].x)/6;
-      double right_eye_y = (face_landmark[42].y + face_landmark[43].y + face_landmark[44].y + face_landmark[45].y + face_landmark[46].y + face_landmark[47].y)/6;
+        left_eye_x = (face_landmark[36].x + face_landmark[37].x + face_landmark[38].x + face_landmark[39].x + face_landmark[40].x + face_landmark[41].x)/6;
+        left_eye_y = (face_landmark[36].y + face_landmark[37].y + face_landmark[38].y + face_landmark[39].y + face_landmark[40].y + face_landmark[41].y)/6;
+        right_eye_x = (face_landmark[42].x + face_landmark[43].x + face_landmark[44].x + face_landmark[45].x + face_landmark[46].x + face_landmark[47].x)/6;
+        right_eye_y = (face_landmark[42].y + face_landmark[43].y + face_landmark[44].y + face_landmark[45].y + face_landmark[46].y + face_landmark[47].y)/6;
 
-      for (int j = 0; j < face_landmark.size(); j++) {
-        landmarks.push_back(face_landmark[j]);
+        for (unsigned int j = 0; j < face_landmark.size(); j++) {
+          landmarks.push_back(face_landmark[j]);
+        }
+
+        left =  face_landmark[1].x;
+        right = face_landmark[15].x;
+        bottom = face_landmark[8].y;
       }
+      else
+      {
+        dlib::full_object_detection shape = pose_model(cimg, dlibRectFaces[i]);
 
-      double left =  face_landmark[1].x;
-      double right = face_landmark[15].x;
-      double bottom = face_landmark[8].y;
+        left_eye_x = (shape.part(36).x() + shape.part(37).x() + shape.part(38).x() + shape.part(39).x() + shape.part(40).x() + shape.part(41).x())/6;
+        left_eye_y = (shape.part(36).y() + shape.part(37).y() + shape.part(38).y() + shape.part(39).y() + shape.part(40).y() + shape.part(41).y())/6;
+        right_eye_x = (shape.part(42).x() + shape.part(43).x() + shape.part(44).x() + shape.part(45).x() + shape.part(46).x() + shape.part(47).x())/6;
+        right_eye_y = (shape.part(42).y() + shape.part(43).y() + shape.part(44).y() + shape.part(45).y() + shape.part(46).y() + shape.part(47).y())/6;
 
-#else
-      dlib::deserialize(FACE_LANDMARK_DETECTION_MODEL_PATH) >> pose_model;
+        cv::Point2f nose;
+        nose.x = shape.part(30).x();
+        nose.y = shape.part(30).y();
+        landmarks.push_back(nose);  //nose
 
-      double left_eye_x = (shape.part(36).x() + shape.part(37).x() + shape.part(38).x() + shape.part(39).x() + shape.part(40).x() + shape.part(41).x())/6;
-      double left_eye_y = (shape.part(36).y() + shape.part(37).y() + shape.part(38).y() + shape.part(39).y() + shape.part(40).y() + shape.part(41).y())/6;
-      double right_eye_x = (shape.part(42).x() + shape.part(43).x() + shape.part(44).x() + shape.part(45).x() + shape.part(46).x() + shape.part(47).x())/6;
-      double right_eye_y = (shape.part(42).y() + shape.part(43).y() + shape.part(44).y() + shape.part(45).y() + shape.part(46).y() + shape.part(47).y())/6;
+        landmarks.push_back(Point2f((float)shape.part(48).x(),(float)shape.part(48).y()));  //right mouse
+        landmarks.push_back(Point2f((float)shape.part(54).x(),(float)shape.part(54).y()));  //left mouse
+        landmarks.push_back(Point2f((float)shape.part(0).x(),(float)shape.part(0).y()));    //right ear
+        landmarks.push_back(Point2f((float)shape.part(16).x(),(float)shape.part(16).y()));  //left ear
+        landmarks.push_back(Point2f((float)shape.part(8).x(),(float)shape.part(8).y()));  //bottom
 
-      cv::Point2f nose;
-      nose.x = shape.part(30).x();
-      nose.y = shape.part(30).y();
-      landmarks.push_back(nose);  //nose
-
-      landmarks.push_back(Point2f((float)shape.part(48).x(),(float)shape.part(48).y()));  //right mouse
-      landmarks.push_back(Point2f((float)shape.part(54).x(),(float)shape.part(54).y()));  //left mouse
-      landmarks.push_back(Point2f((float)shape.part(0).x(),(float)shape.part(0).y()));    //right ear
-      landmarks.push_back(Point2f((float)shape.part(16).x(),(float)shape.part(16).y()));  //left ear
-      landmarks.push_back(Point2f((float)shape.part(8).x(),(float)shape.part(8).y()));  //bottom
-
-      double left =  shape.part(1).x();
-      double right = shape.part(15).x();
-      double bottom = shape.part(8).y();
-#endif
+        left =  shape.part(1).x();
+        right = shape.part(15).x();
+        bottom = shape.part(8).y();
+      }
 
       double tan = (left_eye_y - right_eye_y )/(left_eye_x - right_eye_x );
       double rotate_angle = atan(tan) * 180 / M_PI;
@@ -482,18 +564,15 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
       aligning_faces.push_back(final_face);
       final_face_mat = warped(final_face);
 
-      //cv::resize(final_face_mat, final_face_mat, CAFFE_FACE_SIZE);
       sprintf(outputImage, "face_predict_%02d.jpg", i);
       cv::imwrite(CV_FACE_PREDICT_DIR + outputImage, final_face_mat);
       rot_mat.release();
     }
-    end = clock();
-    alignment_time = 1000.0 * (end-start)/(double) CLOCKS_PER_SEC;
+    alignment_time = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
     int size = aligning_faces.size();
 #if DEBUG
     printf( "Face Alignment %d faces and time is %g ms\n", size, alignment_time);
 #endif
-    gray.release();
     newimg.release();
     warped.release();
     final_face_mat.release();
@@ -515,6 +594,7 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
 bool FaceVerification::faceVerification(int face_predict_num, vector<string>& face_ids, vector<cv::Rect>& faces) {
   bool no_strangers = true;
   double start,end;
+  const float threshold = ConfigReader::getInstance()->sc_config.confidence_threshold;
 
   if (face_predict_num <= 0) {
      return false;
@@ -532,29 +612,27 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
     char file_name[100];
     sprintf(file_name, "face_predict_%02d.jpg", i);
     string img_path = CV_FACE_PREDICT_DIR+file_name;
-    if (!file_exists(img_path)) {
+    if (!boost::filesystem::exists(img_path)) {
         printf("Can't find %s\n", img_path.c_str());
         continue;
     }
 
-    bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
-    if (checkBlurryImage(img_path, intersects ? 60 : 150)) {
-        //face_ids.push_back("Too Blurry!");
-        //continue;
-    }
-
-    int index = cfv_->verify_face(img_path, face_register_features, CAFFE_STRNGER_THD);
-    //string face_id = "Stranger";
+    fv_result = cfv_->verify_face(img_path, face_register_features, threshold);
     string face_id = "";
-    if (index != -1) {
-        face_id = face_register_paths[index].filename().string();
-        if (ENABLE_AUTO_FACE_REGISTER) faceRegister(img_path, face_register_paths[index].string());
+    bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
+    if (fv_result->index != -1) {
+        face_id = face_register_paths[fv_result->index].filename().string();
+        if (enable_auto_face_registration_retry) {
+            if (fv_result->confidence > threshold
+                    && !checkBlurryImage(img_path, intersects ? 60 : 150)) {
+                faceRegistration(img_path, face_register_paths[fv_result->index].string());
+            }
+        }
     } else {
-        index = cfv_->verify_face(img_path, retry_face_register_features, CAFFE_STRNGER_THD);
-        if (index != -1) {
-            face_id = face_register_paths[index].filename().string();
-            if (ENABLE_AUTO_FACE_REGISTER) faceRegister(img_path, face_register_paths[index].string());
-        } else {
+        fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold);
+        if (fv_result->index != -1) {
+            face_id = face_register_paths[fv_result->index].filename().string();
+        } else if(!checkBlurryImage(img_path, intersects ? 60 : 150)) {
             no_strangers = false;
             sprintf(file_name, "face_stranger_%02d.jpg", stranger_index);
             string stranger_img_path = CV_TEMP_DIR+file_name;
@@ -587,17 +665,14 @@ void drawLabel(Mat& img, Rect box, string label, Scalar color) {
   int id_y = box.y - (fontScale * 30);
   if (id_y < 0) id_y = 0;
   int rect_width = box.width * 0.5;
-  if (label == "Stranger") {
-    rect_width = box.width * 0.65;
-    color = Scalar(0, 0, 255);
-  } else if (label == "Too Blurry!") {
-    rect_width = box.width * 0.8;
-    color = Scalar(0, 0, 255);
+  if (label.find("Too Blurry!") != std::string::npos) {
+      rect_width = box.width * 0.8;
+      color = Scalar(0, 0, 255);
   }
-  rectangle( img, cvPoint(cvRound(box.x), cvRound(id_y)),
-        cvPoint(cvRound(box.x + rect_width - 1), cvRound(id_y + (fontScale * 30))),
+  rectangle( img, Point(round(box.x), round(id_y)),
+        Point(round(box.x + rect_width - 1), round(id_y + (fontScale * 30))),
         color,  CV_FILLED , 8, 0);
-  cv::putText(img, label, Point(cvRound(box.x + (fontScale * 5)), cvRound(id_y + (fontScale * 25))),
+  cv::putText(img, label, Point(round(box.x + (fontScale * 5)), round(id_y + (fontScale * 25))),
         cv::FONT_HERSHEY_DUPLEX, fontScale, Scalar(255, 255, 255),
         2);
 }
@@ -611,23 +686,19 @@ void FaceVerification::drawFaceBoxes(Mat& img, vector<Rect>& faces, vector<strin
   for(vector<Rect>::const_iterator box = faces.begin(); box != faces.end(); box++, i++ )
   {
     Scalar color = colors[i%8];
-    rectangle( img, cvPoint(cvRound(box->x), cvRound(box->y)),
-        cvPoint(cvRound(box->x + box->width-1), cvRound(box->y + box->height-1)),
-        color, 6, 8, 0);
-    if (face_ids[i] != "") drawLabel(img, faces[i], face_ids[i], color);
+    rectangle( img, box->tl(), box->br(), color, 6, 8, 0);
+    if (face_ids[i] != "" && face_ids[i].find("User#") == std::string::npos) {
+        drawLabel(img, faces[i], face_ids[i], color);
+    }
   }
-  /*rectangle( img, cvPoint(cvRound(leftRect.x), cvRound(leftRect.y)),
-        cvPoint(cvRound(leftRect.x + leftRect.width-1), cvRound(leftRect.y + leftRect.height-1)),
-        Scalar(255, 255, 255), 6, 8, 0);
-  rectangle( img, cvPoint(cvRound(rightRect.x), cvRound(rightRect.y)),
-        cvPoint(cvRound(rightRect.x + rightRect.width-1), cvRound(rightRect.y + rightRect.height-1)),
-        Scalar(255, 255, 255), 6, 8, 0);*/
+  /*rectangle( img, leftRect.tl(), leftRect.br(), Scalar(255, 255, 255), 6, 8, 0);
+  rectangle( img, rightRect.tl(), rightRect.br(), Scalar(255, 255, 255), 6, 8, 0);*/
 }
 
-void FaceVerification::drawFaceLandmarks(Mat& img, vector<Point2f >& landmarks)
+void FaceVerification::drawFaceLandmarks(Mat& img, vector<Point2f>& landmarks)
 {
     //Draw landmark on face
-    for(int i = 0; i < landmarks.size(); i++)
+    for(unsigned int i = 0; i < landmarks.size(); i++)
     {
         //printf("dlibLandmark - point : %f , %f",imagePoints[a].x,imagePoints[a].y);
         Scalar color = CV_RGB(0,255,255);
@@ -635,15 +706,9 @@ void FaceVerification::drawFaceLandmarks(Mat& img, vector<Point2f >& landmarks)
     }
 }
 
-void FaceVerification::drawDebugInformation(Mat& img) {
+void FaceVerification::drawDebugInformation(Mat& img, double fps) {
     char fpsMsg[100];
     Scalar color =  CV_RGB(0,0,255);
-    total_time = total_time + detect_time + alignment_time + predit_time;
-    if (frame_count == 30) {
-        fps = 1000 / (total_time / frame_count);
-        frame_count = 0;
-        total_time = 0;
-    }
     sprintf(fpsMsg, "%.1fFPS", fps);
     cv::putText(img, fpsMsg, Point(5, 30), cv::FONT_HERSHEY_DUPLEX, 1.1, color, 2);
 }
@@ -652,16 +717,22 @@ void FaceVerification::drawDebugInformation(Mat& img) {
 void FaceVerification::reset(void)
 {
   printf("reset!\n");
-  if (init_libs_state_) loadFaceFeatures();
+  if (init_libs_state_) loadRegisteredFaces();
 }
 
-int FaceVerification::detect(cv::Mat &img, vector<cv::Rect>& faces)
+int FaceVerification::detect(cv::Mat &img,
+    vector<cv::Rect>& faces,
+    vector<string>& face_ids,
+    vector<Point2f>& landmarks)
 {
+  faces.clear();
+  landmarks.clear();
+
+  bool use_face_tracking = false;
   bool next_process = true;
-  frame_count++;
   if (!init_libs_state_) {
     printf("Please initial Face CV Libs before face detectation!\n");
-    return CV_FR_INIT_FAIL;
+    return -1;
   }
 
   string face_predict_dir = CV_ROOT_DIR + "/face_predict/";
@@ -674,59 +745,97 @@ int FaceVerification::detect(cv::Mat &img, vector<cv::Rect>& faces)
   start = omp_get_wtime();
   faceDetection(img, faces);
   if (faces.size() == 0) {
-    stranger_count = 0;
-    printf("Could not detect faces in predict frame!\n");
-    next_process = false;
-  }
-
-  vector<Point2f > landmarks;
-  vector<Rect> aligning_faces(faces);
-  faceAlignment(img, aligning_faces, landmarks);
-  leftRect = Rect(0, 0, img.cols * 0.2, img.rows);
-  rightRect = Rect(img.cols * 0.8, 0, img.cols * 0.2, img.rows);
-  if (next_process && (landmarks.size() == 0 || aligning_faces.size() == 0)) {
-    stranger_count = 0;
-    printf("Could not find any face landmarks in predict frame\n");
-    next_process = false;
-  }
-
-  vector<string> face_ids;
-  if (next_process && !faceVerification(aligning_faces.size(), face_ids, faces)) {
-    if (ENABLE_AUTO_FACE_REGISTER) {
-        stranger_count++;
-        if (stranger_count > MAX_STRANGER_COUNT) {
-            stranger_count = 0;
-            std::vector<dlib::file> face_stranger_files = dlib::get_files_in_directory_tree(CV_TEMP_DIR,
-                    dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 10);
-            for (int i = 0; i < face_stranger_files.size(); ++i)
-            {
-                faceRegister(face_stranger_files[i].full_name());
-            }
-        }
+    face_detection_failed_count++;
+    if (face_detection_failed_count > 5) {
+        last_faces.clear();
+        face_detection_failed_count = 0;
+        stranger_count = 0;
+        printf("Could not detect faces in predict frame!\n");
+        next_process = false;
+        face_ids.clear();
+    } else if (last_faces.size() > 0) {
+      faces = last_faces;
     }
   } else {
-    stranger_count = 0;
+    if ((last_faces.size() == faces.size()) && (face_ids.size() == faces.size())) {
+      use_face_tracking = true;
+      for(unsigned int i = 0; i < last_faces.size(); i++) {
+        if (getIoU(last_faces[i], faces[i]) == 0 || face_ids[i] == "") {
+          use_face_tracking = false;
+          break;
+        }
+      }
+    }
+    last_faces = faces;
+    face_detection_failed_count = 0;
   }
+
+  vector<Rect> aligning_faces(faces);
+  leftRect = Rect(0, 0, img.cols * 0.2, img.rows);
+  rightRect = Rect(img.cols * 0.8, 0, img.cols * 0.2, img.rows);
+  if (next_process && !use_face_tracking) {
+    faceAlignment(img, aligning_faces, landmarks);
+    if ((landmarks.size() == 0 || aligning_faces.size() == 0)) {
+      stranger_count = 0;
+      printf("Could not find any face landmarks in predict frame\n");
+      next_process = false;
+    }
+  }
+
+  if (next_process) {
+    if (!use_face_tracking) {
+      face_ids.clear();
+      if (!faceVerification(aligning_faces.size(), face_ids, faces)) {
+        if (enable_auto_face_registration) {
+          stranger_count++;
+          const int max_stranger_count = ConfigReader::getInstance()->haar_config.enable ? 10 : 60;
+          if (stranger_count > max_stranger_count) {
+            std::vector<dlib::file> face_stranger_files = dlib::get_files_in_directory_tree(CV_TEMP_DIR,
+                    dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 10);
+            for (unsigned int i = 0; i < face_stranger_files.size(); ++i)
+            {
+              if(faceRegistration(face_stranger_files[i].full_name()))
+              {
+                stranger_count = 0;
+              }
+            }
+          }
+        }
+      } else {
+        stranger_count = 0;
+      }
+    } else {
+      printf("We use last result!\n");
+      stranger_count = 0;
+    }
+  } else {
+    face_ids.clear();
+  }
+
   end = omp_get_wtime();
 #if DEBUG
   printf( "Total time is %f ms\n", 1000.0 * (end-start));
 #endif
-
-#ifdef ENABLE_DRAW_FACE_BOXS
-  if (faces.size() > 0)
-    drawFaceBoxes(img, faces, face_ids);
-#endif
-
-#ifdef ENABLE_DRAW_FACE_LANDMARKS
-  if (landmarks.size() > 0)
-    drawFaceLandmarks(img, landmarks);
-#endif
-
-#ifdef ENABLE_DRAW_DEBUG_INFORMATION
-  drawDebugInformation(img);
-#endif
-
   return 0;
+}
+
+bool FaceVerification::checkFaces(string img_path)
+{
+  cv::Mat img = imread(img_path);
+  IplImage *face_img = new IplImage(img);
+  const float sub_threshold = ConfigReader::getInstance()->yolo_config.sub_confidence_threshold;
+  face_boxes = sub_yolo_detect(face_img, sub_threshold, .5, 1.2);
+  if (face_boxes != NULL) {
+    int detection_num = sub_yolo_get_detection_num();
+    for (int i = 0; i < detection_num; ++i) {
+      if (face_boxes[i].width > 0 && face_boxes[i].height > 0) {
+        return true;
+      }
+    }
+  }
+  img.release();
+  delete face_img;
+  return false;
 }
 
 bool FaceVerification::checkBlurryImage(string img_path, int blur_threshold)
@@ -746,9 +855,15 @@ bool FaceVerification::checkBlurryImage(string img_path, int blur_threshold)
   return (focusMeasure < blur_threshold);
 }
 
-bool FaceVerification::faceRegister(string face_register_path, string face_id_dir)
+bool FaceVerification::faceRegistration(string face_register_path, string face_id_dir)
 {
   if (boost::filesystem::exists(face_register_path)) {
+    if (!checkFaces(face_register_path)) {
+      printf("No face for registration!\n");
+      boost::filesystem::remove(face_register_path);
+      return false;
+    }
+
     bool is_retry = true;
     if (face_id_dir == "") {
         int dir_cnt = std::count_if(
@@ -759,7 +874,7 @@ bool FaceVerification::faceRegister(string face_register_path, string face_id_di
         is_retry = false;
         char face_dir_name[100];
         sprintf(face_dir_name, "%02d", face_id);
-        face_id_dir = CV_FACE_REGISTER_DIR + boost::str(boost::format("User%s") % face_dir_name);
+        face_id_dir = CV_FACE_REGISTER_DIR + boost::str(boost::format("User#%s") % face_dir_name);
         boost::filesystem::create_directory(face_id_dir);
     }
 
@@ -779,9 +894,13 @@ bool FaceVerification::faceRegister(string face_register_path, string face_id_di
             face_register_features.push_back(face_register_feature);
         }
     }
+  } else {
+    return false;
   }
 
   return true;
 }
 
-
+vector<boost::filesystem::path> FaceVerification::getFaceRegisterPaths() {
+    return face_register_paths;
+}
