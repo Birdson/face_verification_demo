@@ -62,6 +62,7 @@ bool ConfigReader::initConfig() {
   sc_config.model = reader.Get("sc", "model", "");
   sc_config.weight = reader.Get("sc", "weight", "");
   sc_config.confidence_threshold = reader.GetReal("sc", "confidence_threshold", 0.5);
+  sc_config.confidence_threshold_retry = reader.GetReal("sc", "confidence_threshold_retry", 0.5);
 
   return true;
 }

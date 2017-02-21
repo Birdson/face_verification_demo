@@ -53,6 +53,7 @@ typedef struct {
   std::string model;
   std::string weight;
   float confidence_threshold;
+  float confidence_threshold_retry;
 } ScratchConfig;
 
 class ConfigReader {

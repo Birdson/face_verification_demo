@@ -573,6 +573,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
   bool no_strangers = true;
   double start,end;
   const float threshold = ConfigReader::getInstance()->sc_config.confidence_threshold;
+  const float threshold_retry = ConfigReader::getInstance()->sc_config.confidence_threshold_retry;
 
   if (face_predict_num <= 0) {
      return false;
@@ -601,13 +602,13 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
     if (fv_result->index != -1) {
         face_id = face_register_paths[fv_result->index].filename().string();
         if (enable_face_registration_retry) {
-            if (fv_result->confidence > threshold
+            if (fv_result->confidence > threshold_retry
                     && !checkBlurryImage(img_path, intersects ? 60 : 150)) {
                 faceRegistration(img_path, face_register_paths[fv_result->index].string());
             }
         }
     } else {
-        fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold);
+        fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold_retry);
         if (fv_result->index != -1) {
             face_id = face_register_paths[fv_result->index].filename().string();
         } else if(!checkBlurryImage(img_path, intersects ? 60 : 150)) {
