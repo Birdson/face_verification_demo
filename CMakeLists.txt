@@ -28,6 +28,10 @@ include(${CAFFE_ROOT}/cmake/Modules/FindGFlags.cmake)
 include_directories(SYSTEM ${GFLAGS_INCLUDE_DIRS})
 list(APPEND LINKER_LIBS ${GFLAGS_LIBRARIES})
 
+include(${CAFFE_ROOT}/cmake/Modules/FindOpenBLAS.cmake)
+include_directories(${OpenBLAS_INCLUDE_DIR})
+list(APPEND LINKER_LIBS ${OpenBLAS_LIB})
+
 list(APPEND LINKER_LIBS ${CAFFE_ROOT}/build/lib/libcaffe.so)
 
 include_directories(${CAFFE_ROOT}/include /usr/local/cuda/include)
