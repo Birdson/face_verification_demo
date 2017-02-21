@@ -58,6 +58,7 @@ ADD_LIBRARY(${LIB_NAME}
 	${CMAKE_CURRENT_SOURCE_DIR}/src/inih/cpp/INIReader.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/config_reader.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/util.hpp
 )
 
 TARGET_LINK_LIBRARIES(${LIB_NAME}

@@ -11,6 +11,15 @@ typedef struct {
 } WebCamConfig;
 
 typedef struct {
+  int detection_framework;
+  std::string face_registration_dir;
+  bool enable_face_registration;
+  bool enable_draw_face_boxs;
+  bool enable_draw_face_landmarks;
+  bool enable_draw_debug_information;
+} CVConfig;
+
+typedef struct {
   bool enable;
   std::string model;
   std::string weight;
@@ -30,7 +39,7 @@ typedef struct {
 typedef struct {
   bool enable;
   std::string model;
-} HaarcascadeConfig;
+} OpencvConfig;
 
 typedef struct {
   bool enable_caffe;
@@ -46,12 +55,6 @@ typedef struct {
   float confidence_threshold;
 } ScratchConfig;
 
-typedef struct {
-  bool enable_draw_face_boxs;
-  bool enable_draw_face_landmarks;
-  bool enable_draw_debug_information;
-} DebugConfig;
-
 class ConfigReader {
 private:
   ConfigReader();
@@ -63,10 +66,10 @@ public:
   bool initConfig();
   void showConfig();
   WebCamConfig webcam_config;
+  CVConfig cv_config;
   YoloConfig yolo_config;
   SSDConfig ssd_config;
-  HaarcascadeConfig haar_config;
+  OpencvConfig opencv_config;
   LandmarkConfig landmark_config;
   ScratchConfig sc_config;
-  DebugConfig debug_config;
 };

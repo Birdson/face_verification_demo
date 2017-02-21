@@ -15,7 +15,7 @@ Download the Caffe SSD, then follow [Caffe instruction](http://caffe.berkeleyvis
   make runtest -j8
   ```
 
-3. Download the models from [Dropbox](https://www.dropbox.com/s/kaik5g0wnw6qndl/models.tar?dl=0)
+3. Download the models from [Dropbox](https://www.dropbox.com/s/cdyd8bm0bzzwxz1/models.tar?dl=0)
 and stored models in the root of Face Verification Demo.
   ```Shell
   # Extract the models.

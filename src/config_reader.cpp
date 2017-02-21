@@ -30,9 +30,14 @@ bool ConfigReader::initConfig() {
   webcam_config.width = reader.GetInteger("webcam", "width", 640);
   webcam_config.height = reader.GetInteger("webcam", "height", 480);
 
-  int framework = reader.GetInteger("detection", "framework", 0);
+  cv_config.detection_framework = reader.GetInteger("cv", "framework", 0);
+  cv_config.face_registration_dir = reader.Get("cv", "face_registration_dir", "face_register/");
+  cv_config.enable_face_registration = reader.GetBoolean("cv", "enable_face_registration", false);
+  cv_config.enable_draw_face_boxs = reader.GetBoolean("cv", "enable_draw_face_boxs", false);
+  cv_config.enable_draw_face_landmarks = reader.GetBoolean("cv", "enable_draw_face_landmarks", false);
+  cv_config.enable_draw_debug_information = reader.GetBoolean("cv", "enable_draw_debug_information", false);
 
-  yolo_config.enable = (framework == 0);
+  yolo_config.enable = (cv_config.detection_framework == 0);
   yolo_config.model = reader.Get("yolo", "model", "");
   yolo_config.weight = reader.Get("yolo", "weight", "");
   yolo_config.sub_model = reader.Get("yolo", "sub_model", "");
@@ -40,13 +45,13 @@ bool ConfigReader::initConfig() {
   yolo_config.confidence_threshold = reader.GetReal("yolo", "confidence_threshold", 0.24);
   yolo_config.sub_confidence_threshold = reader.GetReal("yolo", "sub_confidence_threshold", 0.24);
 
-  ssd_config.enable = (framework == 1);
+  ssd_config.enable = (cv_config.detection_framework == 1);
   ssd_config.model = reader.Get("ssd", "model", "");
   ssd_config.weight = reader.Get("ssd", "weight", "");
   ssd_config.confidence_threshold = reader.GetReal("yolo", "confidence_threshold", 0.4);
 
-  haar_config.enable = (framework == 2);
-  haar_config.model = reader.Get("haarcascade", "model", "");
+  opencv_config.enable = (cv_config.detection_framework == 2);
+  opencv_config.model = reader.Get("opencv", "model", "");
 
   landmark_config.enable_caffe = reader.GetBoolean("landmark", "enable_caffe", true);
   landmark_config.caffe_model = reader.Get("landmark", "caffe_model", "");
@@ -57,10 +62,6 @@ bool ConfigReader::initConfig() {
   sc_config.model = reader.Get("sc", "model", "");
   sc_config.weight = reader.Get("sc", "weight", "");
   sc_config.confidence_threshold = reader.GetReal("sc", "confidence_threshold", 0.5);
-
-  debug_config.enable_draw_face_boxs = reader.GetBoolean("debug", "enable_draw_face_boxs", false);
-  debug_config.enable_draw_face_landmarks = reader.GetBoolean("debug", "enable_draw_face_landmarks", false);
-  debug_config.enable_draw_debug_information = reader.GetBoolean("debug", "enable_draw_debug_information", false);
 
   return true;
 }

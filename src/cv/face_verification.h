@@ -36,6 +36,12 @@
 
 using namespace std;
 
+typedef struct {
+  cv::Rect face_box;
+  cv::Point2f face_landmark;
+  std::string face_id;
+} Face;
+
 class FaceVerification
 {
   public :
@@ -127,13 +133,10 @@ class FaceVerification
     vector<boost::filesystem::path> getFaceRegisterPaths();
 
     //UI Part
-    void showFaceWindow(cv::Mat& img, std::vector<cv::Rect> faces);
-    void drawFaceBoxes(cv::Mat& img, vector<cv::Rect>& faces, vector<string>& face_ids);
-    void drawFaceLandmarks(cv::Mat& img, vector<cv::Point2f>& landmarks);
-    void drawDebugInformation(cv::Mat& img,  double fps);
+    void showFaceWindow(cv::Mat& img, cv::Mat& combine, std::vector<cv::Rect> faces);
 
-    bool enable_auto_face_registration;
-    bool enable_auto_face_registration_retry;
+    bool enable_face_registration;
+    bool enable_face_registration_retry;
 
   private :
     bool init_libs_state_;
@@ -142,6 +145,7 @@ class FaceVerification
     caffe::CaffeFaceDetection *cfd_;
     caffe::CaffeFaceLandmarkDetection *cfld_;
     caffe::CaffeFaceVerification *cfv_;
+    std::string face_registration_dir;
     std::vector<boost::filesystem::path> face_register_paths;
     std::vector<float*> face_register_features;
     std::vector<float*> retry_face_register_features;

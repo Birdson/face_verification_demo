@@ -1,5 +1,6 @@
 #include "config_reader.h"
 #include "face_verification_demo.hpp"
+#include "cv/util.hpp"
 
 WebCamCap * WebCamCap::s_instance = NULL;
 WebCamCap* WebCamCap::instance() {
@@ -72,21 +73,28 @@ void WebCamCap::captureFrame() {
             start = clock();
         }
 
-        fv->showFaceWindow(frame, faces);
+        cv::Mat combine;
+        fv->showFaceWindow(frame, combine, faces);
 
-        if (faces.size() > 0 && ConfigReader::getInstance()->debug_config.enable_draw_face_boxs) {
-            fv->drawFaceBoxes(frame, faces, face_ids);
+        if (faces.size() > 0 && ConfigReader::getInstance()->cv_config.enable_draw_face_boxs) {
+            drawFaceBoxes(frame, faces, face_ids);
         }
 
-        if (landmarks.size() > 0 && ConfigReader::getInstance()->debug_config.enable_draw_face_landmarks) {
-            fv->drawFaceLandmarks(frame, landmarks);
+        if (landmarks.size() > 0 && ConfigReader::getInstance()->cv_config.enable_draw_face_landmarks) {
+            drawFaceLandmarks(frame, landmarks);
         }
 
-        if (ConfigReader::getInstance()->debug_config.enable_draw_face_landmarks) {
-            fv->drawDebugInformation(frame, fps);
+        if (ConfigReader::getInstance()->cv_config.enable_draw_face_landmarks) {
+            drawFPS(frame, fps);
         }
 
-        imshow("Face Verificaiton Demo", frame);
+        Mat out_frame = Mat::zeros(frame.rows+combine.rows, frame.cols, frame.type());
+        combine.copyTo(out_frame(Rect(0, 0, combine.cols, combine.rows)));
+        frame.copyTo(out_frame(Rect(0, combine.rows, frame.cols, frame.rows)));
+
+        imshow("Face Verificaiton Demo", out_frame);
+
+        //imshow("Face Verificaiton Demo", frame);
 
         if (waitKey(30) >= 0) {
             break;

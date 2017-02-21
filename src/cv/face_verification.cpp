@@ -22,6 +22,7 @@
  ******************************************************************************/
 #include "config_reader.h"
 #include "cv/face_verification.h"
+#include "cv/util.hpp"
 
 #include <string>
 
@@ -48,41 +49,17 @@ using namespace boost::lambda;
 
 static double detect_time = 0, alignment_time = 0, predit_time = 0;
 static const std::string CV_ROOT_DIR = "./";
-static const std::string CV_FACE_REGISTER_DIR = CV_ROOT_DIR + "face_register/";
 static const std::string CV_FACE_PREDICT_DIR= CV_ROOT_DIR + "face_predict/";
 static const std::string CV_TEMP_DIR = CV_ROOT_DIR + ".temp/";
 
 static const std::string POSE_NAME[] = {"Pitch", "Yaw", "Roll"};
 
-inline float getIoU(Rect a, Rect b)
-{
-  Rect unionRect = a | b;
-  Rect intersectionRect = a & b;
-  float iou = (float)intersectionRect.area()/(float)unionRect.area();
-  return iou;
-}
-
-inline void CVRect_to_DlibRect(vector<dlib::rectangle>& d_rect, vector<Rect>& cv_rect)
-{
-  dlib::rectangle rect;
-
-  d_rect.clear();
-
-  for(unsigned int i=0; i < cv_rect.size(); i++)
-  {
-    rect.set_left(cv_rect[i].x);
-    rect.set_top(cv_rect[i].y);
-    rect.set_right(cv_rect[i].x + cv_rect[i].height); //x + height
-    rect.set_bottom(cv_rect[i].y + cv_rect[i].width); // y + width
-    d_rect.push_back(rect);
-  }
-}
-
 FaceVerification::FaceVerification()
 {
   cfv_ = NULL;
-  enable_auto_face_registration = true;
-  enable_auto_face_registration_retry = true && enable_auto_face_registration;
+  face_registration_dir =  ConfigReader::getInstance()->cv_config.face_registration_dir;
+  enable_face_registration = ConfigReader::getInstance()->cv_config.enable_face_registration;
+  enable_face_registration_retry = true && enable_face_registration;
   if (!boost::filesystem::exists(CV_TEMP_DIR)) {
     boost::filesystem::create_directory(CV_TEMP_DIR);
   }
@@ -121,10 +98,10 @@ void FaceVerification::loadRegisteredFaces(void)
   face_register_paths.clear();
   face_register_features.clear();
   retry_face_register_features.clear();
-  if (!boost::filesystem::exists(CV_FACE_REGISTER_DIR)) {
-    boost::filesystem::create_directory(CV_FACE_REGISTER_DIR);
+  if (!boost::filesystem::exists(face_registration_dir)) {
+    boost::filesystem::create_directory(face_registration_dir);
   } else {
-    directory_iterator dirIter(CV_FACE_REGISTER_DIR);
+    directory_iterator dirIter(face_registration_dir);
     directory_iterator endIter;
     for( ; dirIter != endIter; ++dirIter ) {
       try {
@@ -135,13 +112,13 @@ void FaceVerification::loadRegisteredFaces(void)
           float* face_register_feature = cfv_->extract_feature(face_register_files[0].full_name());
           face_register_features.push_back(face_register_feature);
           if (face_register_files.size() > 1) {
-              face_register_feature = cfv_->extract_feature(face_register_files[1].full_name());
+            face_register_feature = cfv_->extract_feature(face_register_files[1].full_name());
           } else {
-              face_register_feature = NULL;
+            face_register_feature = NULL;
           }
-              retry_face_register_features.push_back(face_register_feature);
-          }
-        } catch(std::exception const& ex) {
+          retry_face_register_features.push_back(face_register_feature);
+        }
+      } catch(std::exception const& ex) {
         cerr << dirIter->path() << " " << ex.what() << endl;
       }
     }
@@ -200,9 +177,9 @@ bool FaceVerification::initFaceDetection(void)
       cfd_ = new caffe::CaffeFaceDetection(model, weight, "", mean_value);
       init_state = true;
     }
-    else if (ConfigReader::getInstance()->haar_config.enable)
+    else if (ConfigReader::getInstance()->opencv_config.enable)
     {
-      const std::string model = ConfigReader::getInstance()->haar_config.model;
+      const std::string model = ConfigReader::getInstance()->opencv_config.model;
       if (!boost::filesystem::exists(model)) {
         CHECK_GT(model.size(), 0) << "Need a Face Detection Model to detect face.";
         printf("Can't find Face Detection Model %s\n", model.c_str());
@@ -323,7 +300,7 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
     face_boxes = yolo_detect(frame, threshold, .5, 1.2);
     if (face_boxes != NULL) {
       int detection_num = yolo_get_detection_num();
-      for (int i = 0; i < detection_num; ++i) {
+      for (unsigned int i = 0; i < detection_num; ++i) {
         if (face_boxes[i].width > 0 && face_boxes[i].height > 0) {
           faces.push_back(Rect(face_boxes[i].xmin, face_boxes[i].ymin, face_boxes[i].width, face_boxes[i].height));
         }
@@ -336,7 +313,7 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
     const float threshold = ConfigReader::getInstance()->ssd_config.confidence_threshold;
     std::vector<std::vector<float>> detections = cfd_->Detect(img);
     const int detection_size = 7;
-    for (int i = 0; i < detections.size(); ++i) {
+    for (unsigned int i = 0; i < detections.size(); ++i) {
       const std::vector <float> detection = detections[i];
       // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
 
@@ -370,7 +347,7 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
       }
     }
   }
-  else if (ConfigReader::getInstance()->haar_config.enable)
+  else if (ConfigReader::getInstance()->opencv_config.enable)
   {
     const cv::Size min_face_detect_size(50, 50);
     const cv::Size max_face_detect_size(450, 450);
@@ -396,7 +373,7 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
   gray.release();
 }
 
-void FaceVerification::showFaceWindow(Mat& img, vector<Rect> faces)
+void FaceVerification::showFaceWindow(Mat& img, Mat& combine, vector<Rect> faces)
 {
   if (last_face_areas.size() != faces.size()) last_face_areas.clear();
 
@@ -411,9 +388,9 @@ void FaceVerification::showFaceWindow(Mat& img, vector<Rect> faces)
     }
   }
 
-  const int size = 300;
+  const int size = 330;
   if (faces.size() > 0) {
-    Mat combine = Mat::zeros(size, size*faces.size(), img.type());
+    combine = Mat::zeros(size, size*faces.size(), img.type());
     for(unsigned int i = 0; i < faces.size(); i++) {
       const int x_center = faces[i].x + faces[i].width/2;
       const int y_center = faces[i].y + faces[i].height/2;
@@ -445,11 +422,12 @@ void FaceVerification::showFaceWindow(Mat& img, vector<Rect> faces)
       face.copyTo(combine(Rect(size*i, 0, size, size)));
       face.release();
     }
-    imshow("Face Window", combine);
-    combine.release();
+    //imshow("Face Window", combine);
   } else {
+    combine = Mat::zeros(size, size, img.type());
     destroyWindow("Face Window");
   }
+  //combine.release();
 }
 
 void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vector<Point2f>& landmarks)
@@ -607,7 +585,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
 
   start = omp_get_wtime();
   int stranger_index = 0;
-  for (int i = 0; i < face_predict_num; ++i)
+  for (unsigned int i = 0; i < face_predict_num; ++i)
   {
     char file_name[100];
     sprintf(file_name, "face_predict_%02d.jpg", i);
@@ -622,7 +600,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
     bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
     if (fv_result->index != -1) {
         face_id = face_register_paths[fv_result->index].filename().string();
-        if (enable_auto_face_registration_retry) {
+        if (enable_face_registration_retry) {
             if (fv_result->confidence > threshold
                     && !checkBlurryImage(img_path, intersects ? 60 : 150)) {
                 faceRegistration(img_path, face_register_paths[fv_result->index].string());
@@ -649,68 +627,6 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
   printf( "Face Verification %d faces and time is %f ms\n", face_predict_num, predit_time);
 #endif
    return no_strangers;
-}
-
-static const Scalar colors[] =  { CV_RGB(0,0,255),
-        CV_RGB(0,128,255),
-        CV_RGB(0,255,255),
-        CV_RGB(0,255,0),
-        CV_RGB(255,128,0),
-        CV_RGB(255,255,0),
-        CV_RGB(255,0,0),
-        CV_RGB(255,0,255)};
-
-void drawLabel(Mat& img, Rect box, string label, Scalar color) {
-  double fontScale = (1.7 * box.width) / 400;
-  int id_y = box.y - (fontScale * 30);
-  if (id_y < 0) id_y = 0;
-  int rect_width = box.width * 0.5;
-  if (label.find("Too Blurry!") != std::string::npos) {
-      rect_width = box.width * 0.8;
-      color = Scalar(0, 0, 255);
-  }
-  rectangle( img, Point(round(box.x), round(id_y)),
-        Point(round(box.x + rect_width - 1), round(id_y + (fontScale * 30))),
-        color,  CV_FILLED , 8, 0);
-  cv::putText(img, label, Point(round(box.x + (fontScale * 5)), round(id_y + (fontScale * 25))),
-        cv::FONT_HERSHEY_DUPLEX, fontScale, Scalar(255, 255, 255),
-        2);
-}
-
-void FaceVerification::drawFaceBoxes(Mat& img, vector<Rect>& faces, vector<string>& face_ids)
-{
-#if DEBUG
-  printf( "Draw Face Detection box on face\n");
-#endif
-  int i = 0;
-  for(vector<Rect>::const_iterator box = faces.begin(); box != faces.end(); box++, i++ )
-  {
-    Scalar color = colors[i%8];
-    rectangle( img, box->tl(), box->br(), color, 6, 8, 0);
-    if (face_ids[i] != "" && face_ids[i].find("User#") == std::string::npos) {
-        drawLabel(img, faces[i], face_ids[i], color);
-    }
-  }
-  /*rectangle( img, leftRect.tl(), leftRect.br(), Scalar(255, 255, 255), 6, 8, 0);
-  rectangle( img, rightRect.tl(), rightRect.br(), Scalar(255, 255, 255), 6, 8, 0);*/
-}
-
-void FaceVerification::drawFaceLandmarks(Mat& img, vector<Point2f>& landmarks)
-{
-    //Draw landmark on face
-    for(unsigned int i = 0; i < landmarks.size(); i++)
-    {
-        //printf("dlibLandmark - point : %f , %f",imagePoints[a].x,imagePoints[a].y);
-        Scalar color = CV_RGB(0,255,255);
-        circle(img, landmarks[i], 1.3,  color, 3, 8, 0);
-    }
-}
-
-void FaceVerification::drawDebugInformation(Mat& img, double fps) {
-    char fpsMsg[100];
-    Scalar color =  CV_RGB(0,0,255);
-    sprintf(fpsMsg, "%.1fFPS", fps);
-    cv::putText(img, fpsMsg, Point(5, 30), cv::FONT_HERSHEY_DUPLEX, 1.1, color, 2);
 }
 
 // implement Cv virtual fuction
@@ -786,9 +702,9 @@ int FaceVerification::detect(cv::Mat &img,
     if (!use_face_tracking) {
       face_ids.clear();
       if (!faceVerification(aligning_faces.size(), face_ids, faces)) {
-        if (enable_auto_face_registration) {
+        if (enable_face_registration) {
           stranger_count++;
-          const int max_stranger_count = ConfigReader::getInstance()->haar_config.enable ? 10 : 60;
+          const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 30;
           if (stranger_count > max_stranger_count) {
             std::vector<dlib::file> face_stranger_files = dlib::get_files_in_directory_tree(CV_TEMP_DIR,
                     dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 10);
@@ -867,14 +783,14 @@ bool FaceVerification::faceRegistration(string face_register_path, string face_i
     bool is_retry = true;
     if (face_id_dir == "") {
         int dir_cnt = std::count_if(
-                directory_iterator(CV_FACE_REGISTER_DIR),
+                directory_iterator(face_registration_dir),
                 directory_iterator(),
                 static_cast<bool(*)(const path&)>(is_directory));
         int face_id = dir_cnt + 1;
         is_retry = false;
         char face_dir_name[100];
         sprintf(face_dir_name, "%02d", face_id);
-        face_id_dir = CV_FACE_REGISTER_DIR + boost::str(boost::format("User#%s") % face_dir_name);
+        face_id_dir = face_registration_dir + boost::str(boost::format("User#%s") % face_dir_name);
         boost::filesystem::create_directory(face_id_dir);
     }
 
