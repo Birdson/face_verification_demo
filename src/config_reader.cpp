@@ -27,11 +27,13 @@ bool ConfigReader::initConfig() {
   }
 
   webcam_config.device = reader.GetInteger("webcam", "device", 0);
-  webcam_config.width = reader.GetInteger("webcam", "width", 640);
-  webcam_config.height = reader.GetInteger("webcam", "height", 480);
+  webcam_config.width = reader.GetInteger("webcam", "width", 1280);
+  webcam_config.height = reader.GetInteger("webcam", "height", 720);
 
   cv_config.detection_framework = reader.GetInteger("cv", "framework", 0);
+  cv_config.skip_frames = reader.GetInteger("cv", "skip_frames", 1);
   cv_config.face_registration_dir = reader.Get("cv", "face_registration_dir", "face_register/");
+  cv_config.enable_check_blurry = reader.GetBoolean("cv", "enable_check_blurry", true);
   cv_config.enable_face_registration = reader.GetBoolean("cv", "enable_face_registration", false);
   cv_config.enable_draw_face_boxs = reader.GetBoolean("cv", "enable_draw_face_boxs", false);
   cv_config.enable_draw_face_landmarks = reader.GetBoolean("cv", "enable_draw_face_landmarks", false);

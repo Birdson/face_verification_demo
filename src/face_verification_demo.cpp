@@ -21,6 +21,8 @@ void WebCamCap::captureFrame() {
     if (fv == NULL)
         fv = new FaceVerification();
     namedWindow("Face Verificaiton Demo", 1);
+    const int skip_frames = ConfigReader::getInstance()->cv_config.skip_frames;
+
     cap.open(ConfigReader::getInstance()->webcam_config.device);
     if (!cap.isOpened())  // check if succeeded to connect to the camera
         CV_Assert("WebCam open failed");
@@ -55,8 +57,10 @@ void WebCamCap::captureFrame() {
         if (frame_buffer.size() <= 1) {
             frame_buffer.push_back(frame);
         } else {
-            processFrame();
-            frame_buffer.clear();
+            if ((int)frame_count%skip_frames == 0) {
+                processFrame();
+                frame_buffer.clear();
+            }
         }
 #endif
 

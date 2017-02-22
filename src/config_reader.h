@@ -12,7 +12,9 @@ typedef struct {
 
 typedef struct {
   int detection_framework;
+  int skip_frames;
   std::string face_registration_dir;
+  bool enable_check_blurry;
   bool enable_face_registration;
   bool enable_draw_face_boxs;
   bool enable_draw_face_landmarks;

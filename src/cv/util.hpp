@@ -29,6 +29,8 @@
 
 using namespace cv;
 
+static const std::string KEYWORD_BLURRY = "Too Blurry!";
+
 static const Scalar colors[] =  { CV_RGB(0,0,255),
         CV_RGB(0,128,255),
         CV_RGB(0,255,255),
@@ -44,7 +46,7 @@ inline void drawLabel(cv::Mat& img, cv::Rect box, std::string label, Scalar colo
   int id_y = box.y - (fontScale * 30);
   if (id_y < 0) id_y = 0;
   int rect_width = box.width * 0.5;
-  if (label.find("Too Blurry!") != std::string::npos) {
+  if (label.find(KEYWORD_BLURRY) != std::string::npos) {
       rect_width = box.width * 0.8;
       color = Scalar(0, 0, 255);
   }

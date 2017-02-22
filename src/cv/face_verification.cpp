@@ -462,6 +462,9 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
       double left;
       double right;
       double bottom;
+      double width;
+      double distance_center_x;
+      double distance_center_y;
       if(ConfigReader::getInstance()->landmark_config.enable_caffe)
       {
         float* pose_detection;
@@ -484,6 +487,12 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
         left =  face_landmark[1].x;
         right = face_landmark[15].x;
         bottom = face_landmark[8].y;
+
+        double distance_x = (face_landmark[15].x - face_landmark[1].x) * (face_landmark[15].x - face_landmark[1].x);
+        double distance_y = (face_landmark[15].y - face_landmark[1].y) * (face_landmark[15].y - face_landmark[1].y);
+        distance_center_x = face_landmark[30].x - img.cols * 0.5f;
+        distance_center_y = face_landmark[30].y - img.rows * 0.5f;
+        width = max((right - left), sqrt(distance_x - distance_y));
       }
       else
       {
@@ -508,6 +517,10 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
         left =  shape.part(1).x();
         right = shape.part(15).x();
         bottom = shape.part(8).y();
+
+        double distance_x = (shape.part(15).x() - shape.part(1).x()) * (shape.part(15).x() - shape.part(1).x());
+        double distance_y = (shape.part(15).y() - shape.part(1).y()) * (shape.part(15).y() - shape.part(1).y());
+        width = max((left - right), sqrt(distance_x - distance_y));
       }
 
       double tan = (left_eye_y - right_eye_y )/(left_eye_x - right_eye_x );
@@ -517,12 +530,14 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
       Mat rot_mat = cv::getRotationMatrix2D(cv::Point(warped.cols/2.0f, warped.rows/2.0f), rotate_angle, 1.0);
       cv::warpAffine(newimg, warped, rot_mat, newimg.size());
 
-
-      double width = right - left;
       left = left - width * 0.05;
-      width = width * 1.1;
+      double shift_x = distance_center_y * tan;
+      left = min(left, left + shift_x);
 
-      double top = bottom - width;
+      width = width * 1.1;
+      double shift_y = distance_center_x * tan;
+      if (shift_y < 0.0f)  shift_y = shift_y * 0.9f;
+      double top = (bottom - width) - shift_y;
 
       cv::Rect final_face;
       final_face.x = left;
@@ -599,11 +614,15 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
     fv_result = cfv_->verify_face(img_path, face_register_features, threshold);
     string face_id = "";
     bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
+    if (ConfigReader::getInstance()->cv_config.enable_check_blurry
+            && checkBlurryImage(img_path, intersects ? 20 : 50)) {
+        face_ids.push_back(KEYWORD_BLURRY);
+        continue;
+    }
     if (fv_result->index != -1) {
         face_id = face_register_paths[fv_result->index].filename().string();
         if (enable_face_registration_retry) {
-            if (fv_result->confidence > threshold_retry
-                    && !checkBlurryImage(img_path, intersects ? 60 : 150)) {
+            if (fv_result->confidence > threshold_retry) {
                 faceRegistration(img_path, face_register_paths[fv_result->index].string());
             }
         }
@@ -611,7 +630,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
         fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold_retry);
         if (fv_result->index != -1) {
             face_id = face_register_paths[fv_result->index].filename().string();
-        } else if(!checkBlurryImage(img_path, intersects ? 60 : 150)) {
+        } else {
             no_strangers = false;
             sprintf(file_name, "face_stranger_%02d.jpg", stranger_index);
             string stranger_img_path = CV_TEMP_DIR+file_name;
@@ -663,13 +682,13 @@ int FaceVerification::detect(cv::Mat &img,
   faceDetection(img, faces);
   if (faces.size() == 0) {
     face_detection_failed_count++;
-    if (face_detection_failed_count > 5) {
-        last_faces.clear();
-        face_detection_failed_count = 0;
-        stranger_count = 0;
-        printf("Could not detect faces in predict frame!\n");
-        next_process = false;
-        face_ids.clear();
+    if (face_detection_failed_count > 5 || last_faces.size() == 0) {
+      last_faces.clear();
+      face_detection_failed_count = 0;
+      stranger_count = 0;
+      printf("Could not detect faces in predict frame!\n");
+      next_process = false;
+      face_ids.clear();
     } else if (last_faces.size() > 0) {
       faces = last_faces;
     }
@@ -677,7 +696,9 @@ int FaceVerification::detect(cv::Mat &img,
     if ((last_faces.size() == faces.size()) && (face_ids.size() == faces.size())) {
       use_face_tracking = true;
       for(unsigned int i = 0; i < last_faces.size(); i++) {
-        if (getIoU(last_faces[i], faces[i]) == 0 || face_ids[i] == "") {
+        if (getIoU(last_faces[i], faces[i]) == 0
+                || face_ids[i] == ""
+                || (face_ids[i].find(KEYWORD_BLURRY) != std::string::npos)) {
           use_face_tracking = false;
           break;
         }
@@ -780,7 +801,6 @@ bool FaceVerification::faceRegistration(string face_register_path, string face_i
       boost::filesystem::remove(face_register_path);
       return false;
     }
-
     bool is_retry = true;
     if (face_id_dir == "") {
         int dir_cnt = std::count_if(
