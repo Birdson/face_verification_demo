@@ -299,7 +299,7 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
     const float threshold = ConfigReader::getInstance()->yolo_config.confidence_threshold;
     face_boxes = yolo_detect(frame, threshold, .5, 1.2);
     if (face_boxes != NULL) {
-      int detection_num = yolo_get_detection_num();
+      unsigned int detection_num = yolo_get_detection_num();
       for (unsigned int i = 0; i < detection_num; ++i) {
         if (face_boxes[i].width > 0 && face_boxes[i].height > 0) {
           faces.push_back(Rect(face_boxes[i].xmin, face_boxes[i].ymin, face_boxes[i].width, face_boxes[i].height));
@@ -360,35 +360,20 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
 #if DEBUG
   printf( "Face Detection %ld faces and time is %g ms\n", faces.size(), detect_time);
 #endif
-  Rect temp;
-  for(unsigned int i = 0; i < faces.size(); i++) {
-    for(unsigned int j = i; j < faces.size(); j++) {
-      if( faces[j].area() > faces[i].area() ) {
-        temp = faces[j];
-        faces[j] = faces[i];
-        faces[i] = temp;
-      }
-    }
-  }
+
+  removeDuplicateFaces(faces);
+
+  const int max_detection_num = ConfigReader::getInstance()->cv_config.max_detection_num;
+  sortFaces(faces, max_detection_num);
+
   gray.release();
 }
 
-void FaceVerification::showFaceWindow(Mat& img, Mat& combine, vector<Rect> faces)
+void FaceVerification::createFaceWindow(Mat& img, Mat& combine, vector<Rect> faces)
 {
   if (last_face_areas.size() != faces.size()) last_face_areas.clear();
 
-  Rect temp;
-  for(unsigned int i = 0; i < faces.size(); i++) {
-    for(unsigned int j = i; j < faces.size(); j++) {
-      if( faces[j].x < faces[i].x ) {
-        temp = faces[j];
-        faces[j] = faces[i];
-        faces[i] = temp;
-      }
-    }
-  }
-
-  const int size = 330;
+  const int size = img.cols / max((int)faces.size(), 4);
   if (faces.size() > 0) {
     combine = Mat::zeros(size, size*faces.size(), img.type());
     for(unsigned int i = 0; i < faces.size(); i++) {
@@ -407,7 +392,7 @@ void FaceVerification::showFaceWindow(Mat& img, Mat& combine, vector<Rect> faces
 
       bool needUpdate = true;
       for(unsigned int j = 0; j < last_face_areas.size(); j++) {
-        if (getIoU(last_face_areas[j], faceArea) > 0.4){
+        if (getIoU(last_face_areas[j], faceArea) > 0.5){
           needUpdate = false;
           faceArea = last_face_areas[j];
           break;
@@ -463,8 +448,8 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
       double right;
       double bottom;
       double width;
-      double distance_center_x;
-      double distance_center_y;
+      double distance_center_x = 0.0f;
+      double distance_center_y = 0.0f;
       if(ConfigReader::getInstance()->landmark_config.enable_caffe)
       {
         float* pose_detection;
@@ -601,7 +586,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
 
   start = omp_get_wtime();
   int stranger_index = 0;
-  for (unsigned int i = 0; i < face_predict_num; ++i)
+  for (int i = 0; i < face_predict_num; ++i)
   {
     char file_name[100];
     sprintf(file_name, "face_predict_%02d.jpg", i);
@@ -615,7 +600,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
     string face_id = "";
     bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
     if (ConfigReader::getInstance()->cv_config.enable_check_blurry
-            && checkBlurryImage(img_path, intersects ? 20 : 50)) {
+            && checkBlurryImage(img_path, intersects ? 20 : 40)) {
         face_ids.push_back(KEYWORD_BLURRY);
         continue;
     }
@@ -726,7 +711,7 @@ int FaceVerification::detect(cv::Mat &img,
       if (!faceVerification(aligning_faces.size(), face_ids, faces)) {
         if (enable_face_registration) {
           stranger_count++;
-          const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 30;
+          const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 20;
           if (stranger_count > max_stranger_count) {
             std::vector<dlib::file> face_stranger_files = dlib::get_files_in_directory_tree(CV_TEMP_DIR,
                     dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 10);

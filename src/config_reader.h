@@ -8,10 +8,13 @@ typedef struct {
   int device;
   int width;
   int height;
+  bool enable_virtual_device;
+  std::string virtual_device_path;
 } WebCamConfig;
 
 typedef struct {
   int detection_framework;
+  int max_detection_num;
   int skip_frames;
   std::string face_registration_dir;
   bool enable_check_blurry;

@@ -32,6 +32,7 @@ private:
     vector<Point2f> landmarks;
     WebCamCap() { }
     static WebCamCap * s_instance;
+    pthread_t detectThread;
 public:
     static WebCamCap *instance();
 };

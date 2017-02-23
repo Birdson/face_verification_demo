@@ -112,4 +112,55 @@ inline void CVRect_to_DlibRect(std::vector<dlib::rectangle>& d_rect, std::vector
   }
 }
 
+inline void removeDuplicateFaces(std::vector<cv::Rect>& faces)
+{
+  for(unsigned int i = 0; i < faces.size(); i++) {
+    Rect current = faces[i];
+    for(unsigned int j = i; j < faces.size(); j++) {
+      if(j == i) {
+        continue;
+      } else {
+        Rect temp = faces[j];
+        if(getIoU(current, temp) > 0) {
+          vector<Rect>::iterator iter = faces.begin() + j;
+          faces.erase(iter);
+          j--;
+        }
+      }
+    }
+  }
+}
+
+inline void sortFaces(std::vector<cv::Rect>& faces, unsigned int max_num)
+{
+  cv::Rect temp;
+
+  if (faces.size() > max_num) {
+    for(unsigned int i = 0; i < faces.size(); i++) {
+      for(unsigned int j = i; j < faces.size(); j++) {
+        if( faces[j].area() > faces[i].area() ) {
+          temp = faces[j];
+          faces[j] = faces[i];
+          faces[i] = temp;
+        }
+      }
+    }
+
+    for(unsigned int i = max_num; i < faces.size(); i++) {
+      vector<Rect>::iterator iter = faces.begin() + i;
+      faces.erase(iter);
+    }
+  }
+
+  for(unsigned int i = 0; i < faces.size(); i++) {
+    for(unsigned int j = i; j < faces.size(); j++) {
+      if(faces[j].x < faces[i].x) {
+        temp = faces[j];
+        faces[j] = faces[i];
+        faces[i] = temp;
+      }
+    }
+  }
+}
+
 #endif /* _UTIL_H_ */

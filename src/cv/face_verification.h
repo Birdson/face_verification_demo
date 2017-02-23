@@ -133,7 +133,7 @@ class FaceVerification
     vector<boost::filesystem::path> getFaceRegisterPaths();
 
     //UI Part
-    void showFaceWindow(cv::Mat& img, cv::Mat& combine, std::vector<cv::Rect> faces);
+    void createFaceWindow(cv::Mat& img, cv::Mat& combine, std::vector<cv::Rect> faces);
 
     bool enable_face_registration;
     bool enable_face_registration_retry;
