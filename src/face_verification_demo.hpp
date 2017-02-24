@@ -13,9 +13,8 @@ using namespace cv;
 
 class WebCamCap {
 public:
-    void captureFrame();
+    void startVideoCapture();
     void processFrame();
-    static void CaptureThread(WebCamCap * cap);
     static void ProcessThread(WebCamCap * cap);
     bool keepRunning = true; // Will be changed by the external program.
     std::thread captureThread;
@@ -24,7 +23,7 @@ private:
     double total_time;
     double frame_count = 0, fps = 0;
     FaceVerification *fv = NULL;
-    bool is_processing_frame = false;
+    bool is_start_processing_frame = false;
     std::vector<cv::Mat> frame_buffer;
     cv::VideoCapture cap;
     vector<Rect> faces;

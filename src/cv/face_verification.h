@@ -26,6 +26,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <dlib/image_processing.h>
+#include "blur_detection.hpp"
 #include "caffe_face_detection.hpp"
 #include "caffe_face_landmark_detection.hpp"
 #include "caffe_face_verification.hpp"
@@ -156,6 +157,7 @@ class FaceVerification
     std::vector<cv::Rect> last_face_areas;
     FaceVerificationData* fv_result;
     face *face_boxes;
+    BlurDetection blur_detection;
 
     bool init(void);
     bool initFaceDetection(void);

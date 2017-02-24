@@ -32,6 +32,9 @@ bool ConfigReader::initConfig() {
   webcam_config.enable_virtual_device = reader.GetBoolean("webcam", "enable_virtual_device", false);
   webcam_config.virtual_device_path = reader.Get("webcam", "virtual_device_path", "/dev/video1");
 
+  test_config.enable_video_test = reader.GetBoolean("test", "enable_video_test", false);
+  test_config.video_test_path = reader.Get("test", "virtual_device_path", "");
+
   cv_config.detection_framework = reader.GetInteger("cv", "framework", 0);
   cv_config.max_detection_num = reader.GetInteger("cv", "max_detection_num", 4);
   cv_config.skip_frames = reader.GetInteger("cv", "skip_frames", 1);
@@ -67,7 +70,7 @@ bool ConfigReader::initConfig() {
   sc_config.model = reader.Get("sc", "model", "");
   sc_config.weight = reader.Get("sc", "weight", "");
   sc_config.confidence_threshold = reader.GetReal("sc", "confidence_threshold", 0.5);
-  sc_config.confidence_threshold_retry = reader.GetReal("sc", "confidence_threshold_retry", 0.5);
+  sc_config.confidence_threshold_high = reader.GetReal("sc", "confidence_threshold_high", 0.5);
 
   return true;
 }

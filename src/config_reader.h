@@ -13,6 +13,11 @@ typedef struct {
 } WebCamConfig;
 
 typedef struct {
+  bool enable_video_test;
+  std::string video_test_path;
+} TestConfig;
+
+typedef struct {
   int detection_framework;
   int max_detection_num;
   int skip_frames;
@@ -58,7 +63,7 @@ typedef struct {
   std::string model;
   std::string weight;
   float confidence_threshold;
-  float confidence_threshold_retry;
+  float confidence_threshold_high;
 } ScratchConfig;
 
 class ConfigReader {
@@ -72,6 +77,7 @@ public:
   bool initConfig();
   void showConfig();
   WebCamConfig webcam_config;
+  TestConfig test_config;
   CVConfig cv_config;
   YoloConfig yolo_config;
   SSDConfig ssd_config;

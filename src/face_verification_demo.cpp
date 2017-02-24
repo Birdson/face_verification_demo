@@ -10,10 +10,6 @@ WebCamCap* WebCamCap::instance() {
     return s_instance;
 }
 
-void WebCamCap::CaptureThread(WebCamCap * cap) {
-    cap->captureFrame();
-}
-
 void WebCamCap::ProcessThread(WebCamCap * cap) {
     cap->processFrame();
 }
@@ -23,19 +19,31 @@ void *detectInThread(void *ptr) {
     return 0;
 }
 
-void WebCamCap::captureFrame() {
+void WebCamCap::startVideoCapture() {
     if (fv == NULL)
         fv = new FaceVerification();
     namedWindow("Face Verificaiton Demo", 1);
     const int skip_frames = ConfigReader::getInstance()->cv_config.skip_frames;
+    const Size webcamSize(ConfigReader::getInstance()->webcam_config.width, ConfigReader::getInstance()->webcam_config.height);
 
-    cap.open(ConfigReader::getInstance()->webcam_config.device);
-    if (!cap.isOpened())  // check if succeeded to connect to the camera
-        CV_Assert("WebCam open failed");
-
-    cap.set(CV_CAP_PROP_FRAME_WIDTH, ConfigReader::getInstance()->webcam_config.width);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT, ConfigReader::getInstance()->webcam_config.height);
-    cap.set(CV_CAP_PROP_AUTOFOCUS, 0);
+    if (ConfigReader::getInstance()->test_config.enable_video_test) {
+        cap.open(ConfigReader::getInstance()->test_config.video_test_path);
+        if (!cap.isOpened()) {
+            keepRunning = false;
+            // check if succeeded to openc the video file
+            CV_Assert("VideoFile open failed");
+        }
+    } else {
+        cap.open(ConfigReader::getInstance()->webcam_config.device);
+        if (!cap.isOpened()) {
+            keepRunning = false;
+            // check if succeeded to connect to the camera
+            CV_Assert("WebCam open failed");
+        }
+        cap.set(CV_CAP_PROP_FRAME_WIDTH, webcamSize.width);
+        cap.set(CV_CAP_PROP_FRAME_HEIGHT, webcamSize.height);
+        cap.set(CV_CAP_PROP_AUTOFOCUS, 0);
+    }
 
     V4L2Device v4l2device;
     if (ConfigReader::getInstance()->webcam_config.enable_virtual_device) {
@@ -56,7 +64,16 @@ void WebCamCap::captureFrame() {
     while (keepRunning) {
         frame_count++;
         cap >> frame;
-        flip(frame,frame,1);
+        if( frame.empty()){
+            keepRunning = false;
+            break;
+        }
+        if (ConfigReader::getInstance()->test_config.enable_video_test) {
+            if (frame.cols != webcamSize.width || frame.rows != webcamSize.height)
+                resize(frame, frame, webcamSize);
+        } else {
+            flip(frame,frame,1);
+        }
 #ifdef ENABLE_MULTI_THREAD
         if (frame_buffer.size() <= 1) {
             frame_buffer.push_back(frame);
@@ -64,8 +81,8 @@ void WebCamCap::captureFrame() {
             frame_buffer.erase(frame_buffer.begin());// this part deletes the first element
             frame_buffer.push_back(frame);
         }
-        if (!is_processing_frame) {
-            is_processing_frame = true;
+        if (!is_start_processing_frame) {
+            is_start_processing_frame = true;
             if(pthread_create(&detectThread, 0, detectInThread, 0))
                 CV_Error(Error::Code::StsError, "Thread(detect) creation failed");
             pthread_detach(detectThread);
@@ -88,8 +105,8 @@ void WebCamCap::captureFrame() {
         }
 
         if (frame_count == 30) {
-            total_time = 1000.0 * (clock()-start)/(double) CLOCKS_PER_SEC;
-            fps = 1000 / (total_time / frame_count);
+            total_time = clock()-start;
+            fps = (double) CLOCKS_PER_SEC / (total_time / frame_count);
             frame_count = 0;
             start = clock();
         }
@@ -144,6 +161,7 @@ void WebCamCap::processFrame() {
         int ret = fv->detect(frame_buffer.back(), faces, face_ids, landmarks);
         if (ret == -1) {
           keepRunning = false;
+          break;
         }
     }
   }
@@ -156,18 +174,12 @@ void WebCamCap::processFrame() {
             keepRunning = false;
         }
     }
-    is_processing_frame = false;
 }
 #endif
 
 int main(int argc, char** argv) {
     if(ConfigReader::getInstance()->initConfig()) {
-#ifdef ENABLE_MULTI_THREAD
-        WebCamCap::instance()->captureThread = thread(&WebCamCap::CaptureThread, WebCamCap::instance());
-        WebCamCap::instance()->captureThread.join();
-#else
-        WebCamCap::instance()->CaptureThread(WebCamCap::instance());
-#endif
+        WebCamCap::instance()->startVideoCapture();
     }
     return 0;
 }

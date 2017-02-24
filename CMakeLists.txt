@@ -56,6 +56,8 @@ ADD_LIBRARY(${LIB_NAME}
 	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/caffe_face_detection.hpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/caffe_face_landmark_detection.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/caffe_face_landmark_detection.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/blur_detection.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/blur_detection.hpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/inih/ini.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/inih/ini.c
 	${CMAKE_CURRENT_SOURCE_DIR}/src/inih/cpp/INIReader.h

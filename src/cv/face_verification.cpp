@@ -573,7 +573,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
   bool no_strangers = true;
   double start,end;
   const float threshold = ConfigReader::getInstance()->sc_config.confidence_threshold;
-  const float threshold_retry = ConfigReader::getInstance()->sc_config.confidence_threshold_retry;
+  const float threshold_high = ConfigReader::getInstance()->sc_config.confidence_threshold_high;
 
   if (face_predict_num <= 0) {
      return false;
@@ -596,26 +596,29 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
         continue;
     }
 
-    fv_result = cfv_->verify_face(img_path, face_register_features, threshold);
     string face_id = "";
     bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
-    if (ConfigReader::getInstance()->cv_config.enable_check_blurry
-            && checkBlurryImage(img_path, intersects ? 20 : 40)) {
-        face_ids.push_back(KEYWORD_BLURRY);
-        continue;
-    }
+    bool is_blured = ConfigReader::getInstance()->cv_config.enable_check_blurry
+                    && blur_detection.checkBlurryImage(img_path, 20);
+
+    fv_result = cfv_->verify_face(img_path, face_register_features, (is_blured || intersects) ? threshold_high : threshold);
+
     if (fv_result->index != -1) {
         face_id = face_register_paths[fv_result->index].filename().string();
         if (enable_face_registration_retry) {
-            if (fv_result->confidence > threshold_retry) {
+            if (fv_result->confidence > threshold_high) {
                 faceRegistration(img_path, face_register_paths[fv_result->index].string());
             }
         }
     } else {
-        fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold_retry);
+        fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold_high);
         if (fv_result->index != -1) {
             face_id = face_register_paths[fv_result->index].filename().string();
         } else {
+            if (is_blured) {
+                face_ids.push_back(KEYWORD_BLURRY);
+                continue;
+            }
             no_strangers = false;
             sprintf(file_name, "face_stranger_%02d.jpg", stranger_index);
             string stranger_img_path = CV_TEMP_DIR+file_name;
