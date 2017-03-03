@@ -125,7 +125,7 @@ inline void removeDuplicateFaces(std::vector<cv::Rect>& faces)
         continue;
       } else {
         Rect temp = faces[j];
-        if(getIoU(current, temp) > 0) {
+        if(getIoU(current, temp) > 0.1) {
           vector<Rect>::iterator iter = faces.begin() + j;
           faces.erase(iter);
           j--;
