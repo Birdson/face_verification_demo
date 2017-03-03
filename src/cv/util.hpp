@@ -140,28 +140,29 @@ inline void sortFaces(std::vector<cv::Rect>& faces, unsigned int max_num)
   cv::Rect temp;
 
   if (faces.size() > max_num) {
-    for(unsigned int i = 0; i < faces.size(); i++) {
-      for(unsigned int j = i; j < faces.size(); j++) {
-        if( faces[j].area() > faces[i].area() ) {
-          temp = faces[j];
-          faces[j] = faces[i];
-          faces[i] = temp;
+    for (unsigned int i = 0; i < faces.size() - 1; i++) {
+      for (unsigned int j = 1; j < faces.size() - i; j++) {
+        if (faces[j - 1].area() < faces[j].area()) {
+          temp = faces[j - 1];
+          faces[j - 1] = faces[j];
+          faces[j] = temp;
         }
       }
     }
 
-    for(unsigned int i = max_num; i < faces.size(); i++) {
-      vector<Rect>::iterator iter = faces.begin() + i;
-      faces.erase(iter);
+    std::vector<cv::Rect> temp_faces;
+    for(unsigned int i = 0; i < max_num; i++) {
+      temp_faces.push_back(faces[i]);
     }
+    faces = temp_faces;
   }
 
-  for(unsigned int i = 0; i < faces.size(); i++) {
-    for(unsigned int j = i; j < faces.size(); j++) {
-      if(faces[j].x < faces[i].x) {
-        temp = faces[j];
-        faces[j] = faces[i];
-        faces[i] = temp;
+  for (unsigned int i = 0; i < faces.size() - 1; i++) {
+    for (unsigned int j = 1; j < faces.size() - i; j++) {
+      if (faces[j - 1].x > faces[j].x) {
+        temp = faces[j - 1];
+        faces[j - 1] = faces[j];
+        faces[j] = temp;
       }
     }
   }

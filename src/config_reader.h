@@ -15,6 +15,8 @@ typedef struct {
 typedef struct {
   bool enable_video_test;
   std::string video_test_path;
+  bool enable_image_test;
+  std::string image_test_path;
 } TestConfig;
 
 typedef struct {

@@ -33,7 +33,9 @@ bool ConfigReader::initConfig() {
   webcam_config.virtual_device_path = reader.Get("webcam", "virtual_device_path", "/dev/video1");
 
   test_config.enable_video_test = reader.GetBoolean("test", "enable_video_test", false);
-  test_config.video_test_path = reader.Get("test", "virtual_device_path", "");
+  test_config.video_test_path = reader.Get("test", "video_test_path", "");
+  test_config.enable_image_test = reader.GetBoolean("test", "enable_image_test", false);
+  test_config.image_test_path = reader.Get("test", "image_test_path", "");
 
   cv_config.detection_framework = reader.GetInteger("cv", "framework", 0);
   cv_config.max_detection_num = reader.GetInteger("cv", "max_detection_num", 4);

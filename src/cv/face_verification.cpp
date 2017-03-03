@@ -366,10 +366,11 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
   printf( "Face Detection %ld faces and time is %g ms\n", faces.size(), detect_time);
 #endif
 
-  removeDuplicateFaces(faces);
-
-  const int max_detection_num = ConfigReader::getInstance()->cv_config.max_detection_num;
-  sortFaces(faces, max_detection_num);
+  if (faces.size() > 0) {
+    removeDuplicateFaces(faces);
+    const int max_detection_num = ConfigReader::getInstance()->cv_config.max_detection_num;
+    sortFaces(faces, max_detection_num);
+  }
 
   gray.release();
 }
@@ -640,7 +641,7 @@ bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vec
             }
             no_strangers = false;
             char file_name[100];
-            sprintf(file_name, "face_stranger_%02d.jpg", stranger_index);
+            sprintf(file_name, FACE_STRANGER_FORMAT.c_str(), stranger_index);
             string stranger_img_path = CV_TEMP_DIR+file_name;
             boost::filesystem::copy_file(img_path, stranger_img_path);
             stranger_index++;
