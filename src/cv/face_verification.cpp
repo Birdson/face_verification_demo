@@ -51,6 +51,10 @@ static double detect_time = 0, alignment_time = 0, predit_time = 0;
 static const std::string CV_ROOT_DIR = "./";
 static const std::string CV_FACE_PREDICT_DIR= CV_ROOT_DIR + "face_predict/";
 static const std::string CV_TEMP_DIR = CV_ROOT_DIR + ".temp/";
+static const std::string CV_DEBUG_FACE_DIR = CV_ROOT_DIR + "debug_face/";
+
+static const std::string FACE_PREDICT_FORMAT = "face_predict_%02d.jpg";
+static const std::string FACE_STRANGER_FORMAT = "face_stranger_%02d.jpg";
 
 static const std::string POSE_NAME[] = {"Pitch", "Yaw", "Roll"};
 
@@ -295,13 +299,14 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
   cvtColor( img, gray, CV_BGR2GRAY );
   clock_t time = clock();
   if (ConfigReader::getInstance()->yolo_config.enable) {
+    const cv::Size min_face_detect_size(50, 50);
     IplImage *frame = new IplImage(img);
     const float threshold = ConfigReader::getInstance()->yolo_config.confidence_threshold;
     face_boxes = yolo_detect(frame, threshold, .5, 1.2);
     if (face_boxes != NULL) {
       unsigned int detection_num = yolo_get_detection_num();
       for (unsigned int i = 0; i < detection_num; ++i) {
-        if (face_boxes[i].width > 0 && face_boxes[i].height > 0) {
+        if (min(face_boxes[i].width, face_boxes[i].height) > min_face_detect_size.width) {
           faces.push_back(Rect(face_boxes[i].xmin, face_boxes[i].ymin, face_boxes[i].width, face_boxes[i].height));
         }
       }
@@ -410,26 +415,25 @@ void FaceVerification::createFaceWindow(Mat& img, Mat& combine, vector<Rect> fac
     //imshow("Face Window", combine);
   } else {
     combine = Mat::zeros(size, size, img.type());
-    destroyWindow("Face Window");
+    //destroyWindow("Face Window");
   }
   //combine.release();
 }
 
-void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vector<Point2f>& landmarks)
+void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_paths, vector<Rect> faces, vector<Point2f>& landmarks)
 {
   try
   {
-    unsigned int i;
-    vector<Rect> faces = aligning_faces;
+    int i;
+    int face_num = aligning_face_paths.size();
     vector<dlib::rectangle> dlibRectFaces;
-    CVRect_to_DlibRect(dlibRectFaces, aligning_faces);
     Mat warped, final_face_mat;
     cv::Mat newimg(img.rows, img.cols, CV_8UC3);
     newimg = img.clone();
     dlib::cv_image<dlib::bgr_pixel> cimg(img);
     char outputImage[100];
-    aligning_faces.clear();
     landmarks.clear();
+    aligning_face_paths.clear();
 
     if (boost::filesystem::exists(CV_FACE_PREDICT_DIR)) {
       boost::filesystem::remove_all(CV_FACE_PREDICT_DIR);
@@ -438,7 +442,7 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
 
     clock_t time = clock();
     //#pragma omp parallel for num_threads(1)
-    for (i = 0; i < dlibRectFaces.size(); ++i)
+    for (i = 0; i < face_num; ++i)
     {
       double left_eye_x;
       double left_eye_y;
@@ -539,15 +543,16 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
       if (final_face.y + final_face.height > newimg.rows)
         final_face.height = newimg.rows - final_face.y;
 
-      aligning_faces.push_back(final_face);
       final_face_mat = warped(final_face);
 
-      sprintf(outputImage, "face_predict_%02d.jpg", i);
-      cv::imwrite(CV_FACE_PREDICT_DIR + outputImage, final_face_mat);
+      sprintf(outputImage, FACE_PREDICT_FORMAT.c_str(), i);
+      string aligning_face_path = CV_FACE_PREDICT_DIR + outputImage;
+      cv::imwrite(aligning_face_path, final_face_mat);
+      aligning_face_paths.push_back(aligning_face_path);
       rot_mat.release();
     }
     alignment_time = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
-    int size = aligning_faces.size();
+    int size = aligning_face_paths.size();
 #if DEBUG
     printf( "Face Alignment %d faces and time is %g ms\n", size, alignment_time);
 #endif
@@ -569,13 +574,13 @@ void FaceVerification::faceAlignment(Mat& img, vector<Rect>& aligning_faces, vec
   }
 }
 
-bool FaceVerification::faceVerification(int face_predict_num, vector<string>& face_ids, vector<cv::Rect>& faces) {
+bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vector<string>& face_ids, vector<cv::Rect>& faces) {
   bool no_strangers = true;
   double start,end;
   const float threshold = ConfigReader::getInstance()->sc_config.confidence_threshold;
   const float threshold_high = ConfigReader::getInstance()->sc_config.confidence_threshold_high;
 
-  if (face_predict_num <= 0) {
+  if (aligning_face_paths.size() <= 0) {
      return false;
   }
 
@@ -586,11 +591,9 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
 
   start = omp_get_wtime();
   int stranger_index = 0;
-  for (int i = 0; i < face_predict_num; ++i)
+  for (unsigned int i = 0; i < aligning_face_paths.size(); ++i)
   {
-    char file_name[100];
-    sprintf(file_name, "face_predict_%02d.jpg", i);
-    string img_path = CV_FACE_PREDICT_DIR+file_name;
+    string img_path = aligning_face_paths[i];
     if (!boost::filesystem::exists(img_path)) {
         printf("Can't find %s\n", img_path.c_str());
         continue;
@@ -605,6 +608,22 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
 
     if (fv_result->index != -1) {
         face_id = face_register_paths[fv_result->index].filename().string();
+
+        //Debug
+        if (ConfigReader::getInstance()->cv_config.enable_save_debug_face) {
+          if (!boost::filesystem::exists(CV_DEBUG_FACE_DIR)) {
+            boost::filesystem::create_directory(CV_DEBUG_FACE_DIR);
+          }
+          string debug_face_dir = CV_DEBUG_FACE_DIR + face_id;
+          boost::filesystem::create_directory(debug_face_dir);
+          std::vector<dlib::file> debug_face_files = dlib::get_files_in_directory_tree(debug_face_dir,
+          dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 100);
+          char debug_image_name[100];
+          sprintf(debug_image_name, "%ld", (debug_face_files.size() + 1));
+          string des_path = debug_face_dir + boost::str(boost::format("/%s.jpg") % debug_image_name);
+          boost::filesystem::copy_file(img_path, des_path, copy_option::overwrite_if_exists);
+        }
+
         if (enable_face_registration_retry) {
             if (fv_result->confidence > threshold_high) {
                 faceRegistration(img_path, face_register_paths[fv_result->index].string());
@@ -620,6 +639,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
                 continue;
             }
             no_strangers = false;
+            char file_name[100];
             sprintf(file_name, "face_stranger_%02d.jpg", stranger_index);
             string stranger_img_path = CV_TEMP_DIR+file_name;
             boost::filesystem::copy_file(img_path, stranger_img_path);
@@ -632,7 +652,7 @@ bool FaceVerification::faceVerification(int face_predict_num, vector<string>& fa
   end = omp_get_wtime();
   predit_time = 1000.0 * (end-start);
 #if DEBUG
-  printf( "Face Verification %d faces and time is %f ms\n", face_predict_num, predit_time);
+  printf( "Face Verification %ld faces and time is %f ms\n", aligning_face_paths.size(), predit_time);
 #endif
    return no_strangers;
 }
@@ -670,7 +690,8 @@ int FaceVerification::detect(cv::Mat &img,
   faceDetection(img, faces);
   if (faces.size() == 0) {
     face_detection_failed_count++;
-    if (face_detection_failed_count > 5 || last_faces.size() == 0) {
+    const int max_detection_retry_num = ConfigReader::getInstance()->cv_config.max_detection_retry_num;
+    if (face_detection_failed_count > max_detection_retry_num || last_faces.size() == 0) {
       last_faces.clear();
       face_detection_failed_count = 0;
       stranger_count = 0;
@@ -696,12 +717,12 @@ int FaceVerification::detect(cv::Mat &img,
     face_detection_failed_count = 0;
   }
 
-  vector<Rect> aligning_faces(faces);
+  vector<string> aligning_face_paths(faces.size());
   leftRect = Rect(0, 0, img.cols * 0.2, img.rows);
   rightRect = Rect(img.cols * 0.8, 0, img.cols * 0.2, img.rows);
   if (next_process && !use_face_tracking) {
-    faceAlignment(img, aligning_faces, landmarks);
-    if ((landmarks.size() == 0 || aligning_faces.size() == 0)) {
+    faceAlignment(img, aligning_face_paths, faces, landmarks);
+    if ((landmarks.size() == 0 || aligning_face_paths.size() == 0)) {
       stranger_count = 0;
       printf("Could not find any face landmarks in predict frame\n");
       next_process = false;
@@ -711,7 +732,7 @@ int FaceVerification::detect(cv::Mat &img,
   if (next_process) {
     if (!use_face_tracking) {
       face_ids.clear();
-      if (!faceVerification(aligning_faces.size(), face_ids, faces)) {
+      if (!faceVerification(aligning_face_paths, face_ids, faces)) {
         if (enable_face_registration) {
           stranger_count++;
           const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 20;

@@ -37,12 +37,6 @@
 
 using namespace std;
 
-typedef struct {
-  cv::Rect face_box;
-  cv::Point2f face_landmark;
-  std::string face_id;
-} Face;
-
 class FaceVerification
 {
   public :
@@ -57,9 +51,9 @@ class FaceVerification
      *
      * PARAMETERS  :
      *   @face_register_path : new face image path for face registeration
-     *   @face_id_dir : assign pre registered face folder 
+     *   @face_id_dir : assign pre registered face folder
      *
-     * RETURN  : success or not 
+     * RETURN  : success or not
      *==========================================================================*/
     bool faceRegistration(string face_register_path, string face_id_dir="");
 
@@ -102,13 +96,13 @@ class FaceVerification
      *
      * DESCRIPTION  : Align face for detected faces
      *
-     * PARAMETERS  : 
+     * PARAMETERS  :
      *   @img : source image refrence
      *   @aligning_faces : face region after alignment
      *   @landmarks : face landmarks
      *
      *==========================================================================*/
-    void faceAlignment(cv::Mat& img, vector<cv::Rect>& aligning_faces, vector<cv::Point2f>& landmarks);
+    void faceAlignment(cv::Mat& img, vector<string>& aligning_face_paths, vector<cv::Rect> faces, vector<cv::Point2f>& landmarks);
 
     /*===========================================================================
      * FUNCTION  : faceVerification
@@ -119,16 +113,16 @@ class FaceVerification
      *   @face_predict_num : the number of face for verification
      *   @face_ids : face verification result
      *   @faces : detected face region
-     * 
+     *
      * RETURN  : success or not
      *==========================================================================*/
-    bool faceVerification(int face_predict_num, vector<string>& face_ids, vector<cv::Rect>& faces);
+    bool faceVerification(vector<string>& aligning_face_paths, vector<string>& face_ids, vector<cv::Rect>& faces);
 
     /*===========================================================================
      * FUNCTION  : getFaceRegisterPaths
      *
      * DESCRIPTION  : Get current registered face image paths
-     * 
+     *
      * RETURN  : face image paths
      *==========================================================================*/
     vector<boost::filesystem::path> getFaceRegisterPaths();

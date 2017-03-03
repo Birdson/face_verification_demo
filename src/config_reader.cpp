@@ -37,6 +37,7 @@ bool ConfigReader::initConfig() {
 
   cv_config.detection_framework = reader.GetInteger("cv", "framework", 0);
   cv_config.max_detection_num = reader.GetInteger("cv", "max_detection_num", 4);
+  cv_config.max_detection_retry_num = reader.GetInteger("cv", "max_detection_retry_num", 5);
   cv_config.skip_frames = reader.GetInteger("cv", "skip_frames", 1);
   cv_config.face_registration_dir = reader.Get("cv", "face_registration_dir", "face_register/");
   cv_config.enable_check_blurry = reader.GetBoolean("cv", "enable_check_blurry", true);
@@ -44,6 +45,7 @@ bool ConfigReader::initConfig() {
   cv_config.enable_draw_face_boxs = reader.GetBoolean("cv", "enable_draw_face_boxs", false);
   cv_config.enable_draw_face_landmarks = reader.GetBoolean("cv", "enable_draw_face_landmarks", false);
   cv_config.enable_draw_debug_information = reader.GetBoolean("cv", "enable_draw_debug_information", false);
+  cv_config.enable_save_debug_face = reader.GetBoolean("cv", "enable_save_debug_face", false);
 
   yolo_config.enable = (cv_config.detection_framework == 0);
   yolo_config.model = reader.Get("yolo", "model", "");

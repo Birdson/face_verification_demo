@@ -58,20 +58,24 @@ inline void drawLabel(cv::Mat& img, cv::Rect box, std::string label, Scalar colo
         2);
 }
 
-inline void drawFaceBoxes(cv::Mat& img, std::vector<cv::Rect>& faces, std::vector<std::string>& face_ids)
+inline void drawFaceBoxes(cv::Mat& img, std::vector<cv::Rect> faces, std::vector<std::string> face_ids)
 {
   int i = 0;
   for(std::vector<cv::Rect>::const_iterator box = faces.begin(); box != faces.end(); box++, i++ )
   {
     Scalar color = colors[i%8];
     cv::rectangle( img, box->tl(), box->br(), color, 6, 8, 0);
-    if (face_ids[i] != "" && face_ids[i].find("User#") == std::string::npos) {
+    if (faces.size() == face_ids.size()) {
+      if (face_ids[i] != ""
+          && face_ids[i].find("User#") == std::string::npos
+          && face_ids[i].find(KEYWORD_BLURRY) == std::string::npos) {
         drawLabel(img, faces[i], face_ids[i], color);
+      }
     }
   }
 }
 
-inline void drawFaceLandmarks(cv::Mat& img, std::vector<cv::Point2f>& landmarks)
+inline void drawFaceLandmarks(cv::Mat& img, std::vector<cv::Point2f> landmarks)
 {
     for(unsigned int i = 0; i < landmarks.size(); i++)
     {

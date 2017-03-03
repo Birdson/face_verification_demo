@@ -20,6 +20,7 @@ typedef struct {
 typedef struct {
   int detection_framework;
   int max_detection_num;
+  int max_detection_retry_num;
   int skip_frames;
   std::string face_registration_dir;
   bool enable_check_blurry;
@@ -27,6 +28,7 @@ typedef struct {
   bool enable_draw_face_boxs;
   bool enable_draw_face_landmarks;
   bool enable_draw_debug_information;
+  bool enable_save_debug_face;
 } CVConfig;
 
 typedef struct {
