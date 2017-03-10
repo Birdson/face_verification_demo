@@ -58,6 +58,7 @@ void WebCamCap::startVideoCapture() {
 
     // Inside loop.
     cv::Mat frame;
+    cv::Mat image_frame;
     cv::Mat out_frame;
     cv::Mat virtual_out_frame;
     clock_t start = clock();

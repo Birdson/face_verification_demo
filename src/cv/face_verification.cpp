@@ -636,10 +636,10 @@ bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vec
         fv_result = cfv_->verify_face(img_path, retry_face_register_features, threshold_high);
         if (fv_result->index != -1) {
             face_id = face_register_paths[fv_result->index].filename().string();
-        } else {
+        } else if (enable_face_registration) {
             if (is_blured) {
-                face_ids.push_back(KEYWORD_BLURRY);
-                continue;
+                //face_ids.push_back(KEYWORD_BLURRY);
+                //continue;
             }
             no_strangers = false;
             char file_name[100];
@@ -736,18 +736,16 @@ int FaceVerification::detect(cv::Mat &img,
     if (!use_face_tracking) {
       face_ids.clear();
       if (!faceVerification(aligning_face_paths, face_ids, faces)) {
-        if (enable_face_registration) {
-          stranger_count++;
-          const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 20;
-          if (stranger_count > max_stranger_count) {
-            std::vector<dlib::file> face_stranger_files = dlib::get_files_in_directory_tree(CV_TEMP_DIR,
-                    dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 10);
-            for (unsigned int i = 0; i < face_stranger_files.size(); ++i)
+        stranger_count++;
+        const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 20;
+        if (stranger_count > max_stranger_count) {
+          std::vector<dlib::file> face_stranger_files = dlib::get_files_in_directory_tree(CV_TEMP_DIR,
+                  dlib::match_endings(".png .PNG .jpeg .JPEG .jpg .JPG"), 10);
+          for (unsigned int i = 0; i < face_stranger_files.size(); ++i)
+          {
+            if(faceRegistration(face_stranger_files[i].full_name()))
             {
-              if(faceRegistration(face_stranger_files[i].full_name()))
-              {
-                stranger_count = 0;
-              }
+              stranger_count = 0;
             }
           }
         }
