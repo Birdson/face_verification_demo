@@ -39,6 +39,8 @@
 
 using namespace caffe;  // NOLINT(build/namespaces)
 
+static const int INTERPOLATION = cv::INTER_NEAREST;
+
 CaffeFaceDetection::CaffeFaceDetection(const string& model_file,
                    const string& weights_file,
                    const string& mean_file,
@@ -195,7 +197,7 @@ void CaffeFaceDetection::Preprocess(const cv::Mat& img,
 
   cv::Mat sample_resized;
   if (sample.size() != input_geometry_)
-    cv::resize(sample, sample_resized, input_geometry_);
+    cv::resize(sample, sample_resized, input_geometry_, 0, 0, INTERPOLATION);
   else
     sample_resized = sample;
 

@@ -4,6 +4,8 @@
 using namespace std;
 using namespace cv;
 
+static const int INTERPOLATION = cv::INTER_NEAREST;
+
 void BlurDetection::getHaarWavelet(const Mat &src, Mat &dst)
 {
   int height = src.size().height;
@@ -60,7 +62,7 @@ bool BlurDetection::checkBlurryImage(string img_path, float threshold)
 
   if(src.empty()) return false;
 
-  cv::resize(src, src, cv::Size(40, 40));
+  cv::resize(src, src, cv::Size(40, 40), 0, 0, INTERPOLATION);
 
   float MinZero = 0.05;
 

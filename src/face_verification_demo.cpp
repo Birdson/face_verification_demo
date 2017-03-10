@@ -3,6 +3,8 @@
 #include "cv/util.hpp"
 #include "V4L2Device.h"
 
+static const int INTERPOLATION = cv::INTER_NEAREST;
+
 WebCamCap * WebCamCap::s_instance = NULL;
 WebCamCap* WebCamCap::instance() {
     if (s_instance == NULL)
@@ -82,7 +84,7 @@ void WebCamCap::startVideoCapture() {
 
         if (ConfigReader::getInstance()->test_config.enable_video_test) {
             if (frame.cols != webcamSize.width || frame.rows != webcamSize.height)
-                resize(frame, frame, webcamSize);
+                resize(frame, frame, webcamSize, 0, 0, INTERPOLATION);
         } else if (!ConfigReader::getInstance()->test_config.enable_image_test) {
             flip(frame,frame,1);
         }

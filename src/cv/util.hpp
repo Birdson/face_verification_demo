@@ -31,7 +31,7 @@ using namespace cv;
 
 static const std::string KEYWORD_BLURRY = "Too Blurry!";
 
-static const Scalar colors[] =  { CV_RGB(0,0,255),
+static const Scalar box_colors[] =  { CV_RGB(0,0,255),
         CV_RGB(0,128,255),
         CV_RGB(0,255,255),
         CV_RGB(0,255,0),
@@ -39,6 +39,8 @@ static const Scalar colors[] =  { CV_RGB(0,0,255),
         CV_RGB(255,255,0),
         CV_RGB(255,0,0),
         CV_RGB(255,0,255)};
+
+static const Scalar landmark_color = CV_RGB(0,255,255);
 
 inline void drawLabel(cv::Mat& img, cv::Rect box, std::string label, Scalar color)
 {
@@ -63,7 +65,7 @@ inline void drawFaceBoxes(cv::Mat& img, std::vector<cv::Rect> faces, std::vector
   int i = 0;
   for(std::vector<cv::Rect>::const_iterator box = faces.begin(); box != faces.end(); box++, i++ )
   {
-    Scalar color = colors[i%8];
+    Scalar color = box_colors[i%8];
     cv::rectangle( img, box->tl(), box->br(), color, 6, 8, 0);
     if (faces.size() == face_ids.size()) {
       if (face_ids[i] != ""
@@ -79,8 +81,7 @@ inline void drawFaceLandmarks(cv::Mat& img, std::vector<cv::Point2f> landmarks)
 {
     for(unsigned int i = 0; i < landmarks.size(); i++)
     {
-        Scalar color = CV_RGB(0,255,255);
-        cv::circle(img, landmarks[i], 1.3,  color, 3, 8, 0);
+        cv::circle(img, landmarks[i], 1.3,  landmark_color, 3, 8, 0);
     }
 }
 
@@ -135,7 +136,7 @@ inline void removeDuplicateFaces(std::vector<cv::Rect>& faces)
   }
 }
 
-inline void sortFaces(std::vector<cv::Rect>& faces, unsigned int max_num)
+inline void sortFaces(std::vector<cv::Rect>& faces, int max_num)
 {
   cv::Rect temp;
 

@@ -58,6 +58,8 @@ static const std::string FACE_STRANGER_FORMAT = "face_stranger_%02d.jpg";
 
 static const std::string POSE_NAME[] = {"Pitch", "Yaw", "Roll"};
 
+static const int INTERPOLATION = cv::INTER_NEAREST;
+
 FaceVerification::FaceVerification()
 {
   cfv_ = NULL;
@@ -409,7 +411,7 @@ void FaceVerification::createFaceWindow(Mat& img, Mat& combine, vector<Rect> fac
       }
 
       Mat face = img(faceArea);
-      resize(face, face, Size(size, size));
+      resize(face, face, Size(size, size), 0, 0, INTERPOLATION);
       face.copyTo(combine(Rect(size*i, 0, size, size)));
       face.release();
     }

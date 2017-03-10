@@ -26,6 +26,7 @@ namespace caffe {
 
 static const string CV_ROOT_DIR = "./";
 static const string CV_TEMP_FACE_IMAGE = CV_ROOT_DIR+".face.jpg";
+static const int INTERPOLATION = cv::INTER_NEAREST;
 
 template <typename T>
 vector<size_t> ordered(vector<T> const& values) {
@@ -203,7 +204,7 @@ void CaffeFaceVerification::Preprocess(const cv::Mat& img,
 
   cv::Mat sample_resized;
   if (sample.size() != input_geometry_)
-    cv::resize(sample, sample_resized, input_geometry_);
+    cv::resize(sample, sample_resized, input_geometry_, 0, 0, INTERPOLATION);
   else
     sample_resized = sample;
 
@@ -233,7 +234,7 @@ float* CaffeFaceVerification::extract_feature(string img_path) {
 
     if (caffe_predit_size == 57) {
         cv::Mat cv_img = cv::imread(img_path, CV_LOAD_IMAGE_GRAYSCALE);
-        cv::resize(cv_img, cv_img, cv::Size(60, 60));
+        cv::resize(cv_img, cv_img, cv::Size(60, 60), 0, 0, INTERPOLATION);
         cv::Rect final_face;
         final_face.x = 1.5;
         final_face.y = 1.5;
@@ -244,7 +245,7 @@ float* CaffeFaceVerification::extract_feature(string img_path) {
         cv::imwrite(img_path, cv_img);
     } else if (caffe_predit_size == 58) {
         cv::Mat cv_img = cv::imread(img_path, CV_LOAD_IMAGE_GRAYSCALE);
-        cv::resize(cv_img, cv_img, cv::Size(60, 60));
+        cv::resize(cv_img, cv_img, cv::Size(60, 60), 0, 0, INTERPOLATION);
         cv::Rect final_face;
         final_face.x = 1;
         final_face.y = 1;

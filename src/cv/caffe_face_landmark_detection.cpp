@@ -43,6 +43,7 @@ static const float M_left = -0.15;
 static const float M_right = 1.15;
 static const float M_top = -0.10;
 static const float M_bottom = 1.25;
+static const int INTERPOLATION = cv::INTER_NEAREST;
 
 CaffeFaceLandmarkDetection::CaffeFaceLandmarkDetection(const string& model_file,
                    const string& weights_file,
@@ -204,7 +205,7 @@ void CaffeFaceLandmarkDetection::Preprocess(const cv::Mat& img,
 
   cv::Mat sample_resized;
   if (sample.size() != input_geometry_)
-    cv::resize(sample, sample_resized, input_geometry_);
+    cv::resize(sample, sample_resized, input_geometry_, 0, 0, INTERPOLATION);
   else
     sample_resized = sample;
 

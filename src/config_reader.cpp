@@ -37,7 +37,7 @@ bool ConfigReader::initConfig() {
   test_config.enable_image_test = reader.GetBoolean("test", "enable_image_test", false);
   test_config.image_test_path = reader.Get("test", "image_test_path", "");
 
-  cv_config.detection_framework = reader.GetInteger("cv", "framework", 0);
+  cv_config.detection_framework = reader.GetInteger("cv", "detection_framework", 0);
   cv_config.max_detection_num = reader.GetInteger("cv", "max_detection_num", 4);
   cv_config.max_detection_retry_num = reader.GetInteger("cv", "max_detection_retry_num", 5);
   cv_config.skip_frames = reader.GetInteger("cv", "skip_frames", 1);
