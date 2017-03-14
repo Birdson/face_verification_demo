@@ -66,29 +66,49 @@ void WebCamCap::startVideoCapture() {
     faces.clear();
     face_ids.clear();
     landmarks.clear();
+    int move_point = 0;
     while (keepRunning) {
         frame_count++;
         if (ConfigReader::getInstance()->test_config.enable_image_test) {
-            if(image_frame.empty()){
-                image_frame = imread(ConfigReader::getInstance()->test_config.image_test_path);
-                if (image_frame.cols != webcamSize.width || image_frame.rows != webcamSize.height)
-                    resize(image_frame, image_frame, webcamSize);
-            }
+            image_frame = imread(ConfigReader::getInstance()->test_config.image_test_path);
+            cv::Rect area(move_point, move_point, image_frame.cols - move_point, image_frame.rows - move_point);
+            image_frame = image_frame(area);
+
+            if (image_frame.cols != webcamSize.width || image_frame.rows != webcamSize.height)
+                resize(image_frame, image_frame, webcamSize, 0, 0, INTERPOLATION);
+
             image_frame.copyTo(frame);
+
+            move_point++;
+            move_point = move_point % 250;
         } else {
             cap >> frame;
         }
+
         if(frame.empty()){
-            keepRunning = false;
-            break;
+            if (ConfigReader::getInstance()->test_config.enable_video_test) {
+                cap.release();
+                cap.open(ConfigReader::getInstance()->test_config.video_test_path);
+                if (!cap.isOpened()) {
+                    // check if succeeded to openc the video file
+                    CV_Assert("VideoFile open failed");
+                    keepRunning = false;
+                    break;
+                }
+                cap >> frame;
+            } else {
+                keepRunning = false;
+                break;
+            }
         }
 
-        if (ConfigReader::getInstance()->test_config.enable_video_test) {
+        if (!ConfigReader::getInstance()->test_config.enable_image_test
+            && !ConfigReader::getInstance()->test_config.enable_video_test) {
             if (frame.cols != webcamSize.width || frame.rows != webcamSize.height)
                 resize(frame, frame, webcamSize, 0, 0, INTERPOLATION);
-        } else if (!ConfigReader::getInstance()->test_config.enable_image_test) {
             flip(frame,frame,1);
         }
+
 #ifdef ENABLE_MULTI_THREAD
         if (frame_buffer.size() <= 1) {
             frame_buffer.push_back(frame);
