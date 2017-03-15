@@ -676,7 +676,6 @@ int FaceVerification::detect(cv::Mat &img,
   faces.clear();
   landmarks.clear();
 
-  bool use_face_tracking = false;
   bool next_process = true;
   if (!init_libs_state_) {
     printf("Please initial Face CV Libs before face detectation!\n");
@@ -691,34 +690,73 @@ int FaceVerification::detect(cv::Mat &img,
 
   double start,end;
   start = omp_get_wtime();
-  faceDetection(img, faces);
-  if (faces.size() == 0) {
-    face_detection_failed_count++;
-    const int max_detection_retry_num = ConfigReader::getInstance()->cv_config.max_detection_retry_num;
-    if (face_detection_failed_count > max_detection_retry_num || last_faces.size() == 0) {
-      last_faces.clear();
-      face_detection_failed_count = 0;
-      stranger_count = 0;
-      printf("Could not detect faces in predict frame!\n");
-      next_process = false;
-      face_ids.clear();
-    } else if (last_faces.size() > 0) {
-      faces = last_faces;
-    }
-  } else {
-    if ((last_faces.size() == faces.size()) && (face_ids.size() == faces.size())) {
-      use_face_tracking = true;
-      for(unsigned int i = 0; i < last_faces.size(); i++) {
-        if (getIoU(last_faces[i], faces[i]) == 0
-                || face_ids[i] == ""
-                || (face_ids[i].find(KEYWORD_BLURRY) != std::string::npos)) {
-          use_face_tracking = false;
-          break;
+
+  if (face_trackers.size() > 0) {
+    use_face_tracking_count++;
+    if (use_face_tracking_count >= 60) {
+      use_face_tracking_count = 0;
+      faceDetection(img, faces);
+      if (faces.size() != face_trackers.size()) {
+        use_face_tracking = false;
+      } else {
+        for(unsigned int i = 0; i < last_faces.size(); i++) {
+          if (getIoU(last_faces[i], faces[i]) == 0) {
+            use_face_tracking = false;
+            break;
+          }
         }
       }
+
+      if (!use_face_tracking) face_trackers.clear();
+
     }
-    last_faces = faces;
-    face_detection_failed_count = 0;
+
+    if (face_trackers.size() > 0) {
+      faces.clear();
+      use_face_tracking = true;
+      Rect result;
+      for(unsigned int i = 0; i < face_trackers.size(); ++i) {
+        result = face_trackers[i].update(img);
+        int xmin = max(result.tl().x, 0);
+        int ymin = max(result.tl().y, 0);
+        int xmax = min(result.br().x, img.cols);
+        int ymax = min(result.br().y, img.rows);
+        faces.push_back(Rect(xmin, ymin, xmax-xmin, ymax-ymin));
+      }
+      last_faces = faces;
+    }
+  }
+
+  if (!use_face_tracking) {
+    faceDetection(img, faces);
+    if (faces.size() == 0) {
+      face_detection_failed_count++;
+      const int max_detection_retry_num = ConfigReader::getInstance()->cv_config.max_detection_retry_num;
+      if (face_detection_failed_count > max_detection_retry_num || last_faces.size() == 0) {
+        last_faces.clear();
+        face_detection_failed_count = 0;
+        stranger_count = 0;
+        printf("Could not detect faces in predict frame!\n");
+        next_process = false;
+        face_ids.clear();
+      } else if (last_faces.size() > 0) {
+        faces = last_faces;
+      }
+    } else {
+      if ((last_faces.size() == faces.size()) && (face_ids.size() == faces.size())) {
+        use_face_tracking = true;
+        for(unsigned int i = 0; i < last_faces.size(); i++) {
+          if (getIoU(last_faces[i], faces[i]) == 0
+                  || face_ids[i] == ""
+                  || (face_ids[i].find(KEYWORD_BLURRY) != std::string::npos)) {
+            use_face_tracking = false;
+            break;
+          }
+        }
+      }
+      last_faces = faces;
+      face_detection_failed_count = 0;
+    }
   }
 
   vector<string> aligning_face_paths(faces.size());
@@ -761,6 +799,18 @@ int FaceVerification::detect(cv::Mat &img,
     face_ids.clear();
   }
 
+  if (face_trackers.size() == 0 && !use_face_tracking) {
+    face_trackers.clear();
+    for(unsigned int i = 0; i < faces.size(); ++i) {
+       if (face_ids[i].find(KEYWORD_BLURRY) == std::string::npos
+           && face_ids[i] != "") {
+         KCFTracker face_tracker(HOG, FIXEDWINDOW, MULTISCALE, LAB);
+         face_tracker.init( faces[i], img );
+         face_trackers.push_back(face_tracker);
+       }
+    }
+  }
+
   end = omp_get_wtime();
 #if DEBUG
   printf( "Total time is %f ms\n", 1000.0 * (end-start));
@@ -771,6 +821,11 @@ int FaceVerification::detect(cv::Mat &img,
 bool FaceVerification::checkFaces(string img_path)
 {
   cv::Mat img = imread(img_path);
+  return detectFaces(img);
+}
+
+bool FaceVerification::detectFaces(cv::Mat& img)
+{
   IplImage *face_img = new IplImage(img);
   const float sub_threshold = ConfigReader::getInstance()->yolo_config.sub_confidence_threshold;
   face_boxes = sub_yolo_detect(face_img, sub_threshold, .5, 1.2);
