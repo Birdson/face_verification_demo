@@ -430,6 +430,7 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
     int i;
     int face_num = aligning_face_paths.size();
     vector<dlib::rectangle> dlibRectFaces;
+    CVRect_to_DlibRect(dlibRectFaces, faces);
     Mat warped, final_face_mat;
     cv::Mat newimg(img.rows, img.cols, CV_8UC3);
     newimg = img.clone();
