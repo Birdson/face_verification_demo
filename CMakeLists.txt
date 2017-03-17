@@ -67,6 +67,15 @@ ADD_LIBRARY(${LIB_NAME}
 	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/util.hpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/V4L2Device.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/V4L2Device.h
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/ffttools.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/fhog.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/fhog.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/kcftracker.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/kcftracker.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/kcftracker.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/labdata.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/recttools.hpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/cv/kcf/tracker.h
 )
 
 TARGET_LINK_LIBRARIES(${LIB_NAME}

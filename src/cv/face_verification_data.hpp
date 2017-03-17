@@ -1,5 +1,5 @@
-#ifndef FACE_DATA_HPP_
-#define FACE_DATA_HPP__
+#ifndef FACE_VERIFICATION_DATA_HPP_
+#define FACE_VERIFICATION_DATA_HPP__
 
 class FaceVerificationData{
   public:

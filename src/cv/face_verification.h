@@ -35,7 +35,16 @@
 
 #include "yolo_detector.h"
 
+#include "kcf/kcftracker.hpp"
+
 using namespace std;
+
+typedef struct {
+  cv::Rect face_box;
+  std::vector<cv::Point2f> face_landmark;
+  string aligned_face_path;
+  string face_id;
+} FaceData;
 
 class FaceVerification
 {
@@ -77,7 +86,7 @@ class FaceVerification
      *
      * RETURN  : status
      *==========================================================================*/
-    int detect(cv::Mat &img, vector<cv::Rect>& faces, vector<string>& face_ids, vector<cv::Point2f>& landmarks);
+    int detect(cv::Mat &img, vector<FaceData>& face_datas);
 
     /*===========================================================================
      * FUNCTION  : faceDetection
@@ -89,7 +98,7 @@ class FaceVerification
      *   @faces : detected face region
      *
      *==========================================================================*/
-    void faceDetection(cv::Mat& img, vector<cv::Rect>& faces);
+    void faceDetection(cv::Mat& img, vector<FaceData>& face_datas);
 
     /*===========================================================================
      * FUNCTION  : faceAlignment
@@ -102,7 +111,7 @@ class FaceVerification
      *   @landmarks : face landmarks
      *
      *==========================================================================*/
-    void faceAlignment(cv::Mat& img, vector<string>& aligning_face_paths, vector<cv::Rect> faces, vector<cv::Point2f>& landmarks);
+    void faceAlignment(cv::Mat& img, vector<FaceData>& face_datas);
 
     /*===========================================================================
      * FUNCTION  : faceVerification
@@ -116,7 +125,7 @@ class FaceVerification
      *
      * RETURN  : success or not
      *==========================================================================*/
-    bool faceVerification(vector<string>& aligning_face_paths, vector<string>& face_ids, vector<cv::Rect>& faces);
+    bool faceVerification(vector<FaceData>& face_datas);
 
     /*===========================================================================
      * FUNCTION  : getFaceRegisterPaths
@@ -128,7 +137,7 @@ class FaceVerification
     vector<boost::filesystem::path> getFaceRegisterPaths();
 
     //UI Part
-    void createFaceWindow(cv::Mat& img, cv::Mat& combine, std::vector<cv::Rect> faces);
+    void createFaceWindow(cv::Mat& img, cv::Mat& combine, vector<FaceData>& face_datas);
 
     bool enable_face_registration;
     bool enable_face_registration_retry;
@@ -152,12 +161,21 @@ class FaceVerification
     FaceVerificationData* fv_result;
     face *face_boxes;
     BlurDetection blur_detection;
+    const bool HOG = true;
+    const bool FIXEDWINDOW = false;
+    const bool MULTISCALE = true;
+    const bool LAB = false;
+    std::vector<KCFTracker> face_trackers;
+    std::vector<FaceData> tracking_face_datas;
+    bool use_face_tracking = false;
+    int face_tracking_count;
 
     bool init(void);
     bool initFaceDetection(void);
     bool initFaceLandmarkDetection(void);
     bool initFaceVerification(void);
     bool checkFaces(string img_path);
+    bool detectFaces(cv::Mat& img);
     bool checkBlurryImage(string img_path, int blur_threshold=130);
     void loadRegisteredFaces(void);
 };

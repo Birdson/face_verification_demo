@@ -295,8 +295,9 @@ bool FaceVerification::initFaceVerification(void)
   return true;
 }
 
-void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
+void FaceVerification::faceDetection(cv::Mat& img, vector<FaceData>& face_datas)
 {
+  vector<Rect> faces;
   Mat gray;
   cvtColor( img, gray, CV_BGR2GRAY );
   clock_t time = clock();
@@ -374,21 +375,27 @@ void FaceVerification::faceDetection(Mat& img, vector<Rect>& faces)
     sortFaces(faces, max_detection_num);
   }
 
+  for (unsigned int i = 0; i < faces.size(); ++i) {
+    FaceData face_data;
+    face_data.face_box = faces[i];
+    face_datas.push_back(face_data);
+  }
+
   gray.release();
 }
 
-void FaceVerification::createFaceWindow(Mat& img, Mat& combine, vector<Rect> faces)
+void FaceVerification::createFaceWindow(cv::Mat& img, cv::Mat& combine, vector<FaceData>& face_datas)
 {
-  if (last_face_areas.size() != faces.size()) last_face_areas.clear();
+  if (last_face_areas.size() != face_datas.size()) last_face_areas.clear();
 
-  const int size = img.cols / max((int)faces.size(), 4);
-  if (faces.size() > 0) {
-    combine = Mat::zeros(size, size*faces.size(), img.type());
-    for(unsigned int i = 0; i < faces.size(); i++) {
-      const int x_center = faces[i].x + faces[i].width/2;
-      const int y_center = faces[i].y + faces[i].height/2;
-      int width = max(faces[i].width,350);
-      int height = max(faces[i].height,350);
+  const int size = img.cols / max((int)face_datas.size(), 4);
+  if (face_datas.size() > 0) {
+    combine = Mat::zeros(size, size*face_datas.size(), img.type());
+    for(unsigned int i = 0; i < face_datas.size(); i++) {
+      const int x_center = face_datas[i].face_box.x + face_datas[i].face_box.width/2;
+      const int y_center = face_datas[i].face_box.y + face_datas[i].face_box.height/2;
+      int width = max(face_datas[i].face_box.width,350);
+      int height = max(face_datas[i].face_box.height,350);
       int xmin = max(x_center - width/2, 0);
       int ymin = max(y_center - height/2, 0);
       if (xmin + width > img.cols)
@@ -423,21 +430,17 @@ void FaceVerification::createFaceWindow(Mat& img, Mat& combine, vector<Rect> fac
   //combine.release();
 }
 
-void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_paths, vector<Rect> faces, vector<Point2f>& landmarks)
+void FaceVerification::faceAlignment(cv::Mat& img, vector<FaceData>& face_datas)
 {
   try
   {
     int i;
-    int face_num = aligning_face_paths.size();
-    vector<dlib::rectangle> dlibRectFaces;
-    CVRect_to_DlibRect(dlibRectFaces, faces);
+    int face_num = face_datas.size();
     Mat warped, final_face_mat;
     cv::Mat newimg(img.rows, img.cols, CV_8UC3);
     newimg = img.clone();
     dlib::cv_image<dlib::bgr_pixel> cimg(img);
     char outputImage[100];
-    landmarks.clear();
-    aligning_face_paths.clear();
 
     if (boost::filesystem::exists(CV_FACE_PREDICT_DIR)) {
       boost::filesystem::remove_all(CV_FACE_PREDICT_DIR);
@@ -458,10 +461,11 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
       double width;
       double distance_center_x = 0.0f;
       double distance_center_y = 0.0f;
+      vector<Point2f> face_landmark;
       if(ConfigReader::getInstance()->landmark_config.enable_caffe)
       {
         float* pose_detection;
-        vector<Point2f> face_landmark = cfld_->Detect(img, faces[i], pose_detection);
+        face_landmark = cfld_->Detect(img, face_datas[i].face_box, pose_detection);
 
 
         /*for(unsigned int j = 0; j < 3; j++) {
@@ -472,10 +476,6 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
         left_eye_y = (face_landmark[36].y + face_landmark[37].y + face_landmark[38].y + face_landmark[39].y + face_landmark[40].y + face_landmark[41].y)/6;
         right_eye_x = (face_landmark[42].x + face_landmark[43].x + face_landmark[44].x + face_landmark[45].x + face_landmark[46].x + face_landmark[47].x)/6;
         right_eye_y = (face_landmark[42].y + face_landmark[43].y + face_landmark[44].y + face_landmark[45].y + face_landmark[46].y + face_landmark[47].y)/6;
-
-        for (unsigned int j = 0; j < face_landmark.size(); j++) {
-          landmarks.push_back(face_landmark[j]);
-        }
 
         left =  face_landmark[1].x;
         right = face_landmark[15].x;
@@ -489,7 +489,10 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
       }
       else
       {
-        dlib::full_object_detection shape = pose_model(cimg, dlibRectFaces[i]);
+        dlib::rectangle dlibRectFace;
+        CVRect_to_DlibRect(dlibRectFace, face_datas[i].face_box);
+
+        dlib::full_object_detection shape = pose_model(cimg, dlibRectFace);
 
         left_eye_x = (shape.part(36).x() + shape.part(37).x() + shape.part(38).x() + shape.part(39).x() + shape.part(40).x() + shape.part(41).x())/6;
         left_eye_y = (shape.part(36).y() + shape.part(37).y() + shape.part(38).y() + shape.part(39).y() + shape.part(40).y() + shape.part(41).y())/6;
@@ -499,13 +502,13 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
         cv::Point2f nose;
         nose.x = shape.part(30).x();
         nose.y = shape.part(30).y();
-        landmarks.push_back(nose);  //nose
+        face_landmark.push_back(nose);  //nose
 
-        landmarks.push_back(Point2f((float)shape.part(48).x(),(float)shape.part(48).y()));  //right mouse
-        landmarks.push_back(Point2f((float)shape.part(54).x(),(float)shape.part(54).y()));  //left mouse
-        landmarks.push_back(Point2f((float)shape.part(0).x(),(float)shape.part(0).y()));    //right ear
-        landmarks.push_back(Point2f((float)shape.part(16).x(),(float)shape.part(16).y()));  //left ear
-        landmarks.push_back(Point2f((float)shape.part(8).x(),(float)shape.part(8).y()));  //bottom
+        face_landmark.push_back(Point2f((float)shape.part(48).x(),(float)shape.part(48).y()));  //right mouse
+        face_landmark.push_back(Point2f((float)shape.part(54).x(),(float)shape.part(54).y()));  //left mouse
+        face_landmark.push_back(Point2f((float)shape.part(0).x(),(float)shape.part(0).y()));    //right ear
+        face_landmark.push_back(Point2f((float)shape.part(16).x(),(float)shape.part(16).y()));  //left ear
+        face_landmark.push_back(Point2f((float)shape.part(8).x(),(float)shape.part(8).y())); //bottom
 
         left =  shape.part(1).x();
         right = shape.part(15).x();
@@ -513,8 +516,11 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
 
         double distance_x = (shape.part(15).x() - shape.part(1).x()) * (shape.part(15).x() - shape.part(1).x());
         double distance_y = (shape.part(15).y() - shape.part(1).y()) * (shape.part(15).y() - shape.part(1).y());
+        distance_center_x = shape.part(30).x() - img.cols * 0.5f;
+        distance_center_y = shape.part(30).y() - img.rows * 0.5f;
         width = max((left - right), sqrt(distance_x - distance_y));
       }
+      face_datas[i].face_landmark = face_landmark;
 
       double tan = (left_eye_y - right_eye_y )/(left_eye_x - right_eye_x );
       double rotate_angle = atan(tan) * 180 / M_PI;
@@ -550,13 +556,13 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
       final_face_mat = warped(final_face);
 
       sprintf(outputImage, FACE_PREDICT_FORMAT.c_str(), i);
-      string aligning_face_path = CV_FACE_PREDICT_DIR + outputImage;
-      cv::imwrite(aligning_face_path, final_face_mat);
-      aligning_face_paths.push_back(aligning_face_path);
+      string face_path = CV_FACE_PREDICT_DIR + outputImage;
+      cv::imwrite(face_path, final_face_mat);
+      face_datas[i].aligned_face_path = face_path;
       rot_mat.release();
     }
     alignment_time = 1000.0 * (clock()-time)/(double) CLOCKS_PER_SEC;
-    int size = aligning_face_paths.size();
+    int size = face_datas.size();
 #if DEBUG
     printf( "Face Alignment %d faces and time is %g ms\n", size, alignment_time);
 #endif
@@ -578,13 +584,13 @@ void FaceVerification::faceAlignment(Mat& img, vector<string>& aligning_face_pat
   }
 }
 
-bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vector<string>& face_ids, vector<cv::Rect>& faces) {
+bool FaceVerification::faceVerification(vector<FaceData>& face_datas) {
   bool no_strangers = true;
   double start,end;
   const float threshold = ConfigReader::getInstance()->sc_config.confidence_threshold;
   const float threshold_high = ConfigReader::getInstance()->sc_config.confidence_threshold_high;
 
-  if (aligning_face_paths.size() <= 0) {
+  if (face_datas.size() <= 0) {
      return false;
   }
 
@@ -595,16 +601,16 @@ bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vec
 
   start = omp_get_wtime();
   int stranger_index = 0;
-  for (unsigned int i = 0; i < aligning_face_paths.size(); ++i)
+  for (unsigned int i = 0; i < face_datas.size(); ++i)
   {
-    string img_path = aligning_face_paths[i];
+    string img_path = face_datas[i].aligned_face_path;
     if (!boost::filesystem::exists(img_path)) {
         printf("Can't find %s\n", img_path.c_str());
         continue;
     }
 
     string face_id = "";
-    bool intersects = ((leftRect & faces[i]).area() > 0) || ((rightRect & faces[i]).area() > 0);
+    bool intersects = ((leftRect & face_datas[i].face_box).area() > 0) || ((rightRect & face_datas[i].face_box).area() > 0);
     bool is_blured = ConfigReader::getInstance()->cv_config.enable_check_blurry
                     && blur_detection.checkBlurryImage(img_path, 20);
 
@@ -639,7 +645,7 @@ bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vec
             face_id = face_register_paths[fv_result->index].filename().string();
         } else if (enable_face_registration) {
             if (is_blured) {
-                //face_ids.push_back(KEYWORD_BLURRY);
+                //face_datas[i].face_id = KEYWORD_BLURRY;
                 //continue;
             }
             no_strangers = false;
@@ -650,13 +656,13 @@ bool FaceVerification::faceVerification(vector<string>& aligning_face_paths, vec
             stranger_index++;
         }
     }
-    face_ids.push_back(face_id);
+    face_datas[i].face_id = face_id;
   }
 
   end = omp_get_wtime();
   predit_time = 1000.0 * (end-start);
 #if DEBUG
-  printf( "Face Verification %ld faces and time is %f ms\n", aligning_face_paths.size(), predit_time);
+  printf( "Face Verification %ld faces and time is %f ms\n", face_datas.size(), predit_time);
 #endif
    return no_strangers;
 }
@@ -668,21 +674,17 @@ void FaceVerification::reset(void)
   if (init_libs_state_) loadRegisteredFaces();
 }
 
-int FaceVerification::detect(cv::Mat &img,
-    vector<cv::Rect>& faces,
-    vector<string>& face_ids,
-    vector<Point2f>& landmarks)
+int FaceVerification::detect(cv::Mat &img, vector<FaceData>& face_datas)
 {
-  faces.clear();
-  landmarks.clear();
+  face_datas.clear();
 
+  bool use_face_tracking = false;
   bool next_process = true;
   if (!init_libs_state_) {
     printf("Please initial Face CV Libs before face detectation!\n");
     return -1;
   }
 
-  string face_predict_dir = CV_ROOT_DIR + "/face_predict/";
   if (boost::filesystem::exists(CV_FACE_PREDICT_DIR)) {
     boost::filesystem::remove_all(CV_FACE_PREDICT_DIR);
   }
@@ -690,81 +692,54 @@ int FaceVerification::detect(cv::Mat &img,
 
   double start,end;
   start = omp_get_wtime();
+  faceDetection(img, face_datas);
 
-  if (face_trackers.size() > 0) {
-    use_face_tracking_count++;
-    if (use_face_tracking_count >= 60) {
-      use_face_tracking_count = 0;
-      faceDetection(img, faces);
-      if (faces.size() != face_trackers.size()) {
-        use_face_tracking = false;
-      } else {
-        for(unsigned int i = 0; i < last_faces.size(); i++) {
-          if (getIoU(last_faces[i], faces[i]) == 0) {
-            use_face_tracking = false;
-            break;
-          }
-        }
-      }
-
-      if (!use_face_tracking) face_trackers.clear();
-
-    }
-
-    if (face_trackers.size() > 0) {
-      faces.clear();
-      use_face_tracking = true;
-      Rect result;
-      for(unsigned int i = 0; i < face_trackers.size(); ++i) {
-        result = face_trackers[i].update(img);
-        int xmin = max(result.tl().x, 0);
-        int ymin = max(result.tl().y, 0);
-        int xmax = min(result.br().x, img.cols);
-        int ymax = min(result.br().y, img.rows);
-        faces.push_back(Rect(xmin, ymin, xmax-xmin, ymax-ymin));
-      }
-      last_faces = faces;
-    }
+  face_tracking_count++;
+  bool skip_check_face = true;
+  if (face_tracking_count >= 30) {
+    face_tracking_count = 0;
+    skip_check_face = false;
   }
+  for(unsigned int i = 0; i < face_trackers.size(); ++i) {
+    Rect result = face_trackers[i].update(img);
+    int xmin = max(result.tl().x, 0);
+    int ymin = max(result.tl().y, 0);
+    int xmax = min(result.br().x, img.cols);
+    int ymax = min(result.br().y, img.rows);
+    result = Rect(xmin, ymin, xmax-xmin, ymax-ymin);
 
-  if (!use_face_tracking) {
-    faceDetection(img, faces);
-    if (faces.size() == 0) {
-      face_detection_failed_count++;
-      const int max_detection_retry_num = ConfigReader::getInstance()->cv_config.max_detection_retry_num;
-      if (face_detection_failed_count > max_detection_retry_num || last_faces.size() == 0) {
-        last_faces.clear();
-        face_detection_failed_count = 0;
-        stranger_count = 0;
-        printf("Could not detect faces in predict frame!\n");
-        next_process = false;
-        face_ids.clear();
-      } else if (last_faces.size() > 0) {
-        faces = last_faces;
-      }
+    Mat face_img = img(result);
+    if (skip_check_face || detectFaces(face_img)) {
+      tracking_face_datas[i].face_box = result;
     } else {
-      if ((last_faces.size() == faces.size()) && (face_ids.size() == faces.size())) {
-        use_face_tracking = true;
-        for(unsigned int i = 0; i < last_faces.size(); i++) {
-          if (getIoU(last_faces[i], faces[i]) == 0
-                  || face_ids[i] == ""
-                  || (face_ids[i].find(KEYWORD_BLURRY) != std::string::npos)) {
-            use_face_tracking = false;
-            break;
-          }
-        }
+       vector<KCFTracker>::iterator tracker_iter = face_trackers.begin() + i;
+       face_trackers.erase(tracker_iter);
+       vector<FaceData>::iterator data_iter = tracking_face_datas.begin() + i;
+       tracking_face_datas.erase(data_iter);
+       i--;
+    }
+    face_img.release();
+
+    for(unsigned int j = 0; j < face_datas.size(); ++j) {
+      if (getIoU(result, face_datas[j].face_box) > 0.5) {
+        vector<FaceData>::iterator iter = face_datas.begin() + j;
+        face_datas.erase(iter);
+        break;
       }
-      last_faces = faces;
-      face_detection_failed_count = 0;
     }
   }
 
-  vector<string> aligning_face_paths(faces.size());
+  if (face_datas.size() == 0) use_face_tracking = true;
+
+  vector<string> aligning_face_paths(face_datas.size());
   leftRect = Rect(0, 0, img.cols * 0.2, img.rows);
   rightRect = Rect(img.cols * 0.8, 0, img.cols * 0.2, img.rows);
   if (next_process && !use_face_tracking) {
-    faceAlignment(img, aligning_face_paths, faces, landmarks);
-    if ((landmarks.size() == 0 || aligning_face_paths.size() == 0)) {
+    for(unsigned int i = 0; i < face_datas.size(); ++i) {
+      face_datas[i].aligned_face_path = "";
+    }
+    faceAlignment(img, face_datas);
+    if ((face_datas.size() == 0 || aligning_face_paths.size() == 0)) {
       stranger_count = 0;
       printf("Could not find any face landmarks in predict frame\n");
       next_process = false;
@@ -773,8 +748,10 @@ int FaceVerification::detect(cv::Mat &img,
 
   if (next_process) {
     if (!use_face_tracking) {
-      face_ids.clear();
-      if (!faceVerification(aligning_face_paths, face_ids, faces)) {
+      for(unsigned int i = 0; i < face_datas.size(); ++i) {
+        face_datas[i].face_id = "";
+      }
+      if (!faceVerification(face_datas)) {
         stranger_count++;
         const int max_stranger_count = ConfigReader::getInstance()->opencv_config.enable ? 10 : 20;
         if (stranger_count > max_stranger_count) {
@@ -796,18 +773,45 @@ int FaceVerification::detect(cv::Mat &img,
       stranger_count = 0;
     }
   } else {
-    face_ids.clear();
+    for(unsigned int i = 0; i < face_datas.size(); ++i) {
+      face_datas[i].face_id = "";
+    }
   }
 
-  if (face_trackers.size() == 0 && !use_face_tracking) {
-    face_trackers.clear();
-    for(unsigned int i = 0; i < faces.size(); ++i) {
-       if (face_ids[i].find(KEYWORD_BLURRY) == std::string::npos
-           && face_ids[i] != "") {
-         KCFTracker face_tracker(HOG, FIXEDWINDOW, MULTISCALE, LAB);
-         face_tracker.init( faces[i], img );
-         face_trackers.push_back(face_tracker);
-       }
+  for(unsigned int i = 0; i < face_datas.size(); ++i) {
+    if (face_datas[i].face_id != "") {
+      KCFTracker face_tracker(HOG, FIXEDWINDOW, MULTISCALE, LAB);
+      face_tracker.init( face_datas[i].face_box, img );
+
+      bool is_new_face = true;
+      for(unsigned int j = 0; j < tracking_face_datas.size(); ++j) {
+        if (face_datas[i].face_id.find(tracking_face_datas[j].face_id) != std::string::npos) {
+          is_new_face = false;
+          face_trackers[j] = face_tracker;
+          tracking_face_datas[j].face_box = face_datas[i].face_box;
+          vector<FaceData>::iterator data_iter = face_datas.begin() + i;
+          face_datas.erase(data_iter);
+          i--;
+          break;
+        }
+      }
+
+      if (is_new_face) {
+        face_trackers.push_back(face_tracker);
+        FaceData tracking_face_data;
+        tracking_face_data.face_id = face_datas[i].face_id;
+        tracking_face_datas.push_back(tracking_face_data);
+      }
+    }
+  }
+
+  for(unsigned int i = 0; i < tracking_face_datas.size(); ++i) {
+    if (tracking_face_datas[i].face_box.area() > 0.) {
+      printf( "Face name is %s\n", tracking_face_datas[i].face_id.c_str());
+      FaceData face_data;
+      face_data.face_box = tracking_face_datas[i].face_box;
+      face_data.face_id = tracking_face_datas[i].face_id;
+      face_datas.push_back(face_data);
     }
   }
 

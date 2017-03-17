@@ -60,29 +60,28 @@ inline void drawLabel(cv::Mat& img, cv::Rect box, std::string label, Scalar colo
         2);
 }
 
-inline void drawFaceBoxes(cv::Mat& img, std::vector<cv::Rect> faces, std::vector<std::string> face_ids)
+inline void drawFaceBoxes(cv::Mat& img, std::vector<FaceData>& face_datas)
 {
-  int i = 0;
-  for(std::vector<cv::Rect>::const_iterator box = faces.begin(); box != faces.end(); box++, i++ )
+  for(unsigned int i = 0; i < face_datas.size(); i++)
   {
     Scalar color = box_colors[i%8];
-    cv::rectangle( img, box->tl(), box->br(), color, 6, 8, 0);
-    if (faces.size() == face_ids.size()) {
-      if (face_ids[i] != ""
-          && face_ids[i].find("User#") == std::string::npos
-          && face_ids[i].find(KEYWORD_BLURRY) == std::string::npos) {
-        drawLabel(img, faces[i], face_ids[i], color);
-      }
+    cv::rectangle(img, face_datas[i].face_box.tl(), face_datas[i].face_box.br(), color, 6, 8, 0);
+    if (face_datas[i].face_id != ""
+        && face_datas[i].face_id.find("User#") == std::string::npos
+        && face_datas[i].face_id.find(KEYWORD_BLURRY) == std::string::npos) {
+      drawLabel(img, face_datas[i].face_box, face_datas[i].face_id, color);
     }
   }
 }
 
-inline void drawFaceLandmarks(cv::Mat& img, std::vector<cv::Point2f> landmarks)
+inline void drawFaceLandmarks(cv::Mat& img, std::vector<FaceData>& face_datas)
 {
-    for(unsigned int i = 0; i < landmarks.size(); i++)
-    {
-        cv::circle(img, landmarks[i], 1.3,  landmark_color, 3, 8, 0);
+  for(unsigned int i = 0; i < face_datas.size(); i++)
+  {
+    for(unsigned int j = 0; j < face_datas[i].face_landmark.size(); j++) {
+      cv::circle(img, face_datas[i].face_landmark[j], 1.3,  landmark_color, 3, 8, 0);
     }
+  }
 }
 
 inline void drawFPS(cv::Mat& img,  double fps)
@@ -101,7 +100,7 @@ inline float getIoU(cv::Rect a, cv::Rect b)
   return iou;
 }
 
-inline void CVRect_to_DlibRect(std::vector<dlib::rectangle>& d_rect, std::vector<cv::Rect>& cv_rect)
+/*inline void CVRect_to_DlibRect(std::vector<dlib::rectangle>& d_rect, std::vector<cv::Rect>& cv_rect)
 {
   dlib::rectangle rect;
 
@@ -115,6 +114,14 @@ inline void CVRect_to_DlibRect(std::vector<dlib::rectangle>& d_rect, std::vector
     rect.set_bottom(cv_rect[i].y + cv_rect[i].width); // y + width
     d_rect.push_back(rect);
   }
+}*/
+
+inline void CVRect_to_DlibRect(dlib::rectangle& d_rect, cv::Rect& cv_rect)
+{
+  d_rect.set_left(cv_rect.x);
+  d_rect.set_top(cv_rect.y);
+  d_rect.set_right(cv_rect.x + cv_rect.height); //x + height
+  d_rect.set_bottom(cv_rect.y + cv_rect.width); // y + width
 }
 
 inline void removeDuplicateFaces(std::vector<cv::Rect>& faces)

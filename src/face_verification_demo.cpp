@@ -63,9 +63,9 @@ void WebCamCap::startVideoCapture() {
     cv::Mat virtual_out_frame;
     clock_t start = clock();
     clock_t time = clock();
-    faces.clear();
-    face_ids.clear();
-    landmarks.clear();
+    //faces.clear();
+    //face_ids.clear();
+    //landmarks.clear();
     int move_point = 0;
     while (keepRunning) {
         frame_count++;
@@ -147,14 +147,14 @@ void WebCamCap::startVideoCapture() {
         }
 
         cv::Mat combine;
-        fv->createFaceWindow(frame, combine, faces);
+        fv->createFaceWindow(frame, combine, face_datas);
 
-        if (faces.size() > 0 && ConfigReader::getInstance()->cv_config.enable_draw_face_boxs) {
-            drawFaceBoxes(frame, faces, face_ids);
+        if (ConfigReader::getInstance()->cv_config.enable_draw_face_boxs) {
+            drawFaceBoxes(frame, face_datas);
         }
 
-        if (landmarks.size() > 0 && ConfigReader::getInstance()->cv_config.enable_draw_face_landmarks) {
-            drawFaceLandmarks(frame, landmarks);
+        if (ConfigReader::getInstance()->cv_config.enable_draw_face_landmarks) {
+            drawFaceLandmarks(frame, face_datas);
         }
 
         if (ConfigReader::getInstance()->cv_config.enable_draw_face_landmarks) {
@@ -204,7 +204,8 @@ void WebCamCap::processFrame() {
 #else
 void WebCamCap::processFrame() {
     if (fv != NULL && !frame_buffer.empty()) {
-        int ret = fv->detect(frame_buffer.back(), faces, face_ids, landmarks);
+        //int ret = fv->detect(frame_buffer.back(), faces, face_ids, landmarks);
+        int ret = fv->detect(frame_buffer.back(), face_datas);
         if (ret == -1) {
             keepRunning = false;
         }

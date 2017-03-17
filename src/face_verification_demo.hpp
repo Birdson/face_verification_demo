@@ -26,9 +26,7 @@ private:
     bool is_start_processing_frame = false;
     std::vector<cv::Mat> frame_buffer;
     cv::VideoCapture cap;
-    vector<Rect> faces;
-    vector<string> face_ids;
-    vector<Point2f> landmarks;
+    vector<FaceData> face_datas;
     WebCamCap() { }
     static WebCamCap * s_instance;
     pthread_t detectThread;
