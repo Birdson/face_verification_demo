@@ -100,6 +100,11 @@ CaffeFaceVerification::CaffeFaceVerification(const string model_path,
         scale_=0.0078125;
         caffe_predit_size=106;
         caffe_blob_name="fc1";
+    } else if (caffe_net->name()=="sc81_net") {
+        mean="127.5";
+        scale_=0.0078125;
+        caffe_predit_size=106;
+        caffe_blob_name="fc66";
     }
     const string& mean_value=mean;
 
@@ -288,9 +293,8 @@ float* CaffeFaceVerification::extract_feature(string img_path) {
 
 
     float loss;
-    vector<Blob<float>* > dummy_bottom_vec;
     double start = omp_get_wtime();
-    const vector<Blob<float>*>& result = caffe_net->Forward(dummy_bottom_vec, &loss);
+    const vector<Blob<float>*>& result = caffe_net->Forward(&loss);
     double end = omp_get_wtime();
     double t_load = 1000.0 * (end-start);
     LOG(INFO) << "Elapsed time for extract feature time: " << t_load << " ms.";
