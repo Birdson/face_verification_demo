@@ -9,7 +9,7 @@ set(LIB_NAME face_verification)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fopenmp -DBOOST_NO_CXX11_SCOPED_ENUMS -DCPU_ONLY")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fopenmp -DBOOST_NO_CXX11_SCOPED_ENUMS")
 
-set(CAFFE_ROOT "/home/pegasw2/CV/ssd")
+set(CAFFE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/caffe")
 
 set(LINKER_LIBS "")
 
@@ -20,24 +20,24 @@ list(APPEND LINKER_LIBS ${OpenCV_LIBS})
 
 find_package(Boost COMPONENTS filesystem system REQUIRED)
 
-include(${CAFFE_ROOT}/cmake/Modules/FindGlog.cmake)
+include(${CAFFE_ROOT}/modules/FindGlog.cmake)
 include_directories(SYSTEM ${GLOG_INCLUDE_DIRS})
 list(APPEND LINKER_LIBS ${GLOG_LIBRARIES})
 
-include(${CAFFE_ROOT}/cmake/Modules/FindGFlags.cmake)
+include(${CAFFE_ROOT}/modules/FindGFlags.cmake)
 include_directories(SYSTEM ${GFLAGS_INCLUDE_DIRS})
 list(APPEND LINKER_LIBS ${GFLAGS_LIBRARIES})
 
-include(${CAFFE_ROOT}/cmake/Modules/FindOpenBLAS.cmake)
+include(${CAFFE_ROOT}/modules/FindOpenBLAS.cmake)
 include_directories(${OpenBLAS_INCLUDE_DIR})
 list(APPEND LINKER_LIBS ${OpenBLAS_LIB})
 
-list(APPEND LINKER_LIBS ${CAFFE_ROOT}/build/lib/libcaffe.so)
+list(APPEND LINKER_LIBS ${CAFFE_ROOT}/lib/libcaffe.so)
 
 include_directories(${CAFFE_ROOT}/include /usr/local/cuda/include)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/yolo/include)
-list(APPEND LINKER_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/yolo/lib/libdarknet.so)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/yolo/include)
+list(APPEND LINKER_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/external/yolo/lib/libdarknet.so)
 
 ###########
 ## Build ##
