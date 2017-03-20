@@ -151,7 +151,7 @@ void WebCamCap::startVideoCapture() {
             drawFaceLandmarks(frame, face_datas);
         }
 
-        if (ConfigReader::getInstance()->cv_config.enable_draw_face_landmarks) {
+        if (ConfigReader::getInstance()->cv_config.enable_draw_debug_information) {
             drawFPS(frame, fps);
         }
 
