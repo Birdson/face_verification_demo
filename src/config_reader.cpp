@@ -47,6 +47,7 @@ bool ConfigReader::initConfig() {
   cv_config.enable_draw_face_boxs = reader.GetBoolean("cv", "enable_draw_face_boxs", false);
   cv_config.enable_draw_face_landmarks = reader.GetBoolean("cv", "enable_draw_face_landmarks", false);
   cv_config.enable_draw_debug_information = reader.GetBoolean("cv", "enable_draw_debug_information", false);
+  cv_config.enable_face_area_combination = reader.GetBoolean("cv", "enable_face_area_combination", false);
   cv_config.enable_save_debug_face = reader.GetBoolean("cv", "enable_save_debug_face", false);
 
   yolo_config.enable = (cv_config.detection_framework == 0);

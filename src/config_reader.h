@@ -30,6 +30,7 @@ typedef struct {
   bool enable_draw_face_boxs;
   bool enable_draw_face_landmarks;
   bool enable_draw_debug_information;
+  bool enable_face_area_combination;
   bool enable_save_debug_face;
 } CVConfig;
 

@@ -63,9 +63,6 @@ void WebCamCap::startVideoCapture() {
     cv::Mat virtual_out_frame;
     clock_t start = clock();
     clock_t time = clock();
-    //faces.clear();
-    //face_ids.clear();
-    //landmarks.clear();
     int move_point = 0;
     while (keepRunning) {
         frame_count++;
@@ -146,9 +143,6 @@ void WebCamCap::startVideoCapture() {
             start = clock();
         }
 
-        cv::Mat combine;
-        fv->createFaceWindow(frame, combine, face_datas);
-
         if (ConfigReader::getInstance()->cv_config.enable_draw_face_boxs) {
             drawFaceBoxes(frame, face_datas);
         }
@@ -161,16 +155,20 @@ void WebCamCap::startVideoCapture() {
             drawFPS(frame, fps);
         }
 
-        const int out_frame_hight = frame.rows + max(combine.rows, 320);
-        const int out_frame_width = max(frame.cols, combine.cols);
-        out_frame = Mat::zeros(out_frame_hight, out_frame_width, frame.type());
-        combine.copyTo(out_frame(Rect(0, max(320 - combine.rows, 0), combine.cols, combine.rows)));
-        frame.copyTo(out_frame(Rect(0, max(combine.rows, 320), frame.cols, frame.rows)));
-        combine.release();
+        if (ConfigReader::getInstance()->cv_config.enable_face_area_combination) {
+            cv::Mat combine;
+            fv->createFaceWindow(frame, combine, face_datas);
+            const int out_frame_hight = frame.rows + max(combine.rows, 320);
+            const int out_frame_width = max(frame.cols, combine.cols);
+            out_frame = Mat::zeros(out_frame_hight, out_frame_width, frame.type());
+            combine.copyTo(out_frame(Rect(0, max(320 - combine.rows, 0), combine.cols, combine.rows)));
+            frame.copyTo(out_frame(Rect(0, max(combine.rows, 320), frame.cols, frame.rows)));
+            combine.release();
 
-        imshow("Face Verificaiton Demo", out_frame);
-
-        //imshow("Face Verificaiton Demo", frame);
+            imshow("Face Verificaiton Demo", out_frame);
+        } else {
+            imshow("Face Verificaiton Demo", frame);
+        }
 
         if (ConfigReader::getInstance()->webcam_config.enable_virtual_device) {
             cv::cvtColor(out_frame, virtual_out_frame, CV_BGR2YUV_I420);
@@ -178,8 +176,12 @@ void WebCamCap::startVideoCapture() {
             v4l2device.writeFrame(virtual_out_frame.data);
         }
 
-        if (waitKey(30) >= 0) {
-            break;
+        char key = (char)(cv::waitKey(1)&0xFF);
+        switch (key) {
+            case 'q':
+            case 'Q':
+                keepRunning = false;
+                break;
         }
     }
     frame.release();
@@ -193,7 +195,7 @@ void WebCamCap::startVideoCapture() {
 void WebCamCap::processFrame() {
   while (keepRunning) {
     if (fv != NULL && !frame_buffer.empty()) {
-        int ret = fv->detect(frame_buffer.back(), faces, face_ids, landmarks);
+        int ret = fv->detect(frame_buffer.back(), face_datas);
         if (ret == -1) {
           keepRunning = false;
           break;
@@ -204,7 +206,6 @@ void WebCamCap::processFrame() {
 #else
 void WebCamCap::processFrame() {
     if (fv != NULL && !frame_buffer.empty()) {
-        //int ret = fv->detect(frame_buffer.back(), faces, face_ids, landmarks);
         int ret = fv->detect(frame_buffer.back(), face_datas);
         if (ret == -1) {
             keepRunning = false;
